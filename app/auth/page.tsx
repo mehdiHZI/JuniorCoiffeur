@@ -18,12 +18,38 @@ export default function AuthPage() {
     setLoading(true);
 
     if (isLogin) {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) alert(error.message);
+      if (error) {
+        alert(error.message);
+        setLoading(false);
+        return;
+      }
+
+      const userId = data.user?.id;
+
+      if (!userId) {
+        alert("Utilisateur introuvable");
+        setLoading(false);
+        return;
+      }
+
+      const { data: profile, error: profileErr } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", userId)
+        .single();
+
+      if (profileErr) {
+        alert(profileErr.message);
+        setLoading(false);
+        return;
+      }
+
+      if (profile?.role === "barber") router.push("/barber");
       else router.push("/client");
     } else {
       const { data, error } = await supabase.auth.signUp({
@@ -105,9 +131,7 @@ export default function AuthPage() {
           className="mt-4 text-center text-sm cursor-pointer text-blue-600"
           onClick={() => setIsLogin(!isLogin)}
         >
-          {isLogin
-            ? "Créer un compte"
-            : "Déjà un compte ? Se connecter"}
+          {isLogin ? "Créer un compte" : "Déjà un compte ? Se connecter"}
         </p>
       </div>
     </div>
