@@ -21,127 +21,107 @@ export default function AuthPage() {
     setErr("");
 
     if (isLogin) {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        setErr(error.message);
-        setLoading(false);
-        return;
-      }
-
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) { setErr(error.message); setLoading(false); return; }
       const user = data.user;
-      if (!user) {
-        setErr("Connexion échouée.");
-        setLoading(false);
-        return;
-      }
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
+      if (!user) { setErr("Connexion échouée."); setLoading(false); return; }
+      const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
       router.push(profile?.role === "barber" ? "/barber" : "/client");
     } else {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-
-      if (error) {
-        setErr(error.message);
-        setLoading(false);
-        return;
-      }
-
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) { setErr(error.message); setLoading(false); return; }
       const user = data.user;
       if (user) {
-        await supabase.from("profiles").insert({
-          id: user.id,
-          full_name: fullName,
-          role: "client",
-        });
-
-        await supabase.from("customers").insert({
-          user_id: user.id,
-          qr_token: uuidv4(),
-        });
+        await supabase.from("profiles").insert({ id: user.id, full_name: fullName, role: "client" });
+        await supabase.from("customers").insert({ user_id: user.id, qr_token: uuidv4() });
       }
-
       router.push("/client");
     }
-
     setLoading(false);
   };
 
   return (
-    <div className="min-h-screen bg-[#f3f4f6] flex items-center justify-center px-4">
-      <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-sm">
+    <div style={{
+      minHeight: "100vh",
+      backgroundColor: "#f3f4f6",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "0 16px",
+      fontFamily: "'Helvetica Neue', Arial, sans-serif",
+    }}>
+      <div style={{
+        width: "100%",
+        maxWidth: "440px",
+        backgroundColor: "#ffffff",
+        padding: "40px 36px",
+        borderRadius: "16px",
+        boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+      }}>
 
         {/* Title */}
-        <h1 className="text-2xl font-semibold text-center text-gray-900 mb-8">
+        <h1 style={{ fontSize: "22px", fontWeight: 600, textAlign: "center", color: "#111", marginBottom: "28px" }}>
           {isLogin ? "Vous avez déjà utilisé Planity ?" : "Nouveau sur Planity ?"}
         </h1>
 
         {/* Full name (signup only) */}
         {!isLogin && (
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-800 mb-1">
+          <div style={{ marginBottom: "16px" }}>
+            <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#222", marginBottom: "6px" }}>
               Nom complet *
             </label>
             <input
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 placeholder-gray-400"
               placeholder="Nom complet"
+              style={inputStyle}
             />
           </div>
         )}
 
         {/* Email */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-800 mb-1">
+        <div style={{ marginBottom: "16px" }}>
+          <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#222", marginBottom: "6px" }}>
             Email *
           </label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 placeholder-gray-400"
             placeholder="Email"
+            style={inputStyle}
           />
         </div>
 
         {/* Password */}
-        <div className="mb-2">
-          <label className="block text-sm font-medium text-gray-800 mb-1">
+        <div style={{ marginBottom: "8px" }}>
+          <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#222", marginBottom: "6px" }}>
             Mot de passe *
           </label>
-          <div className="relative">
+          <div style={{ position: "relative" }}>
             <input
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 placeholder-gray-400"
               placeholder="Mot de passe"
+              style={{ ...inputStyle, paddingRight: "48px" }}
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
-              tabIndex={-1}
+              style={{
+                position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)",
+                background: "none", border: "none", cursor: "pointer", color: "#999", padding: 0,
+                display: "flex", alignItems: "center",
+              }}
             >
               {showPassword ? (
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
               ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.477 0-8.268-2.943-9.542-7a9.956 9.956 0 012.293-3.95M6.634 6.634A9.956 9.956 0 0112 5c4.477 0 8.268 2.943 9.542 7a9.97 9.97 0 01-4.176 5.166M3 3l18 18" />
                 </svg>
               )}
@@ -151,11 +131,12 @@ export default function AuthPage() {
 
         {/* Forgot password */}
         {isLogin && (
-          <div className="mb-6">
-            <button
-              type="button"
-              className="text-sm text-gray-700 underline underline-offset-2 hover:text-gray-900 transition"
-            >
+          <div style={{ marginBottom: "24px" }}>
+            <button type="button" style={{
+              background: "none", border: "none", padding: 0, cursor: "pointer",
+              fontSize: "13px", color: "#333", textDecoration: "underline",
+              textUnderlineOffset: "2px",
+            }}>
               Mot de passe oublié ?
             </button>
           </div>
@@ -163,7 +144,7 @@ export default function AuthPage() {
 
         {/* Error */}
         {err && (
-          <div className="mb-4 text-sm text-red-600">
+          <div style={{ marginBottom: "14px", fontSize: "13px", color: "#dc2626" }}>
             {err}
           </div>
         )}
@@ -172,32 +153,40 @@ export default function AuthPage() {
         <button
           onClick={handleAuth}
           disabled={loading}
-          className="w-full bg-black text-white py-3 rounded-lg text-sm font-medium hover:bg-gray-900 transition disabled:opacity-60"
+          style={{
+            width: "100%", backgroundColor: "#111", color: "#fff",
+            padding: "14px", borderRadius: "10px", border: "none",
+            fontSize: "15px", fontWeight: 500, cursor: loading ? "not-allowed" : "pointer",
+            opacity: loading ? 0.6 : 1, transition: "background 0.15s",
+          }}
+          onMouseEnter={e => { if (!loading) (e.target as HTMLButtonElement).style.backgroundColor = "#333"; }}
+          onMouseLeave={e => { (e.target as HTMLButtonElement).style.backgroundColor = "#111"; }}
         >
-          {loading
-            ? "Chargement..."
-            : isLogin
-            ? "Se connecter"
-            : "Créer mon compte"}
+          {loading ? "Chargement..." : isLogin ? "Se connecter" : "Créer mon compte"}
         </button>
 
         {/* Divider */}
-        <div className="flex items-center my-6">
-          <div className="flex-1 h-px bg-gray-200" />
-          <span className="mx-4 text-xs text-gray-400 uppercase tracking-widest">ou</span>
-          <div className="flex-1 h-px bg-gray-200" />
+        <div style={{ display: "flex", alignItems: "center", margin: "24px 0" }}>
+          <div style={{ flex: 1, height: "1px", backgroundColor: "#e5e7eb" }} />
+          <span style={{ margin: "0 14px", fontSize: "11px", color: "#aaa", letterSpacing: "0.1em", textTransform: "uppercase" }}>ou</span>
+          <div style={{ flex: 1, height: "1px", backgroundColor: "#e5e7eb" }} />
         </div>
 
-        {/* Switch mode title */}
-        <h2 className="text-xl font-semibold text-center text-gray-900 mb-4">
+        {/* Switch section */}
+        <h2 style={{ fontSize: "20px", fontWeight: 600, textAlign: "center", color: "#111", marginBottom: "16px" }}>
           {isLogin ? "Nouveau sur Planity ?" : "Vous avez déjà un compte ?"}
         </h2>
 
-        {/* Switch button */}
         <button
           type="button"
           onClick={() => { setIsLogin(!isLogin); setErr(""); }}
-          className="w-full border border-gray-300 py-3 rounded-lg text-sm font-medium text-gray-800 hover:bg-gray-50 transition"
+          style={{
+            width: "100%", backgroundColor: "#fff", color: "#111",
+            padding: "14px", borderRadius: "10px", border: "1px solid #d1d5db",
+            fontSize: "15px", fontWeight: 500, cursor: "pointer", transition: "background 0.15s",
+          }}
+          onMouseEnter={e => { (e.target as HTMLButtonElement).style.backgroundColor = "#f9fafb"; }}
+          onMouseLeave={e => { (e.target as HTMLButtonElement).style.backgroundColor = "#fff"; }}
         >
           {isLogin ? "Créer mon compte" : "Se connecter"}
         </button>
@@ -206,3 +195,15 @@ export default function AuthPage() {
     </div>
   );
 }
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  border: "1px solid #d1d5db",
+  borderRadius: "10px",
+  padding: "13px 16px",
+  fontSize: "14px",
+  color: "#111",
+  outline: "none",
+  boxSizing: "border-box",
+  backgroundColor: "#fff",
+};
