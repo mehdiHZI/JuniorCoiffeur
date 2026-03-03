@@ -82,7 +82,7 @@ export default function AuthPage() {
 
         {/* Title */}
         <h1 style={{ fontSize: "22px", fontWeight: 600, textAlign: "center", color: "#111", marginBottom: "28px" }}>
-          {isLogin ? "Vous avez déjà utilisé Planity ?" : "Nouveau sur Planity ?"}
+          {isLogin ? "Vous avez déjà utilisé chriscut ?" : "Nouveau chez chriscut ?"}
         </h1>
 
         {/* Full name (signup only) */}
@@ -204,7 +204,7 @@ export default function AuthPage() {
 
         {/* Switch section */}
         <h2 style={{ fontSize: "20px", fontWeight: 600, textAlign: "center", color: "#111", marginBottom: "16px" }}>
-          {isLogin ? "Nouveau sur Planity ?" : "Vous avez déjà un compte ?"}
+          {isLogin ? "Nouveau chez chriscut?" : "Vous avez déjà un compte ?"}
         </h2>
 
         <button
