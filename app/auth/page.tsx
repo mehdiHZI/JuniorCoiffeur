@@ -110,31 +110,57 @@ export default function AuthPage() {
           />
         )}
 
-        {/* Email */}
+       {/* Email */}
 <div className="mb-6">
-  <label className="block text-sm text-gray-400 mb-2">
+  <label className="block text-sm text-gray-300 mb-2">
     Email
   </label>
   <input
     type="email"
     placeholder="votre@email.com"
-    className="w-full p-3 rounded-lg bg-[#1f242b] border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-white/30 transition"
     value={email}
     onChange={(e) => setEmail(e.target.value)}
+    className="
+      w-full px-5 py-4
+      rounded-full
+      bg-white/10
+      border border-white/15
+      text-white placeholder-white/40
+      shadow-[0_8px_30px_rgba(0,0,0,0.35)]
+      backdrop-blur-md
+      focus:outline-none
+      focus:border-white/35
+      focus:bg-white/12
+      focus:shadow-[0_0_0_4px_rgba(255,255,255,0.08),0_12px_40px_rgba(0,0,0,0.45)]
+      transition
+    "
   />
 </div>
 
 {/* Mot de passe */}
 <div className="mb-8">
-  <label className="block text-sm text-gray-400 mb-2">
+  <label className="block text-sm text-gray-300 mb-2">
     Mot de passe
   </label>
   <input
     type="password"
     placeholder="••••••••"
-    className="w-full p-3 rounded-lg bg-[#1f242b] border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-white/30 transition"
     value={password}
     onChange={(e) => setPassword(e.target.value)}
+    className="
+      w-full px-5 py-4
+      rounded-full
+      bg-white/10
+      border border-white/15
+      text-white placeholder-white/40
+      shadow-[0_8px_30px_rgba(0,0,0,0.35)]
+      backdrop-blur-md
+      focus:outline-none
+      focus:border-white/35
+      focus:bg-white/12
+      focus:shadow-[0_0_0_4px_rgba(255,255,255,0.08),0_12px_40px_rgba(0,0,0,0.45)]
+      transition
+    "
   />
 </div>
 
