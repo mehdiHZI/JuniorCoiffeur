@@ -1,20 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 type FeedPost = {
   id: number;
   content: string;
+  image_url: string | null;
+  audio_url: string | null;
   created_at: string;
 };
+
+const BUCKET = "feed-media";
 
 export default function BarberFeedPage() {
   const router = useRouter();
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [content, setContent] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +29,7 @@ export default function BarberFeedPage() {
   const loadPosts = async () => {
     const { data, error: err } = await supabase
       .from("feed_posts")
-      .select("id, content, created_at")
+      .select("id, content, image_url, audio_url, created_at")
       .order("created_at", { ascending: false })
       .limit(50);
 
@@ -58,7 +65,10 @@ export default function BarberFeedPage() {
 
   const handlePost = async () => {
     const text = content.trim();
-    if (!text) return;
+    if (!text && !imageFile && !audioFile) {
+      setError("Ajoute au moins un texte, une image ou un vocal.");
+      return;
+    }
     setPosting(true);
     setError(null);
     const { data: authData } = await supabase.auth.getUser();
@@ -66,9 +76,46 @@ export default function BarberFeedPage() {
       setPosting(false);
       return;
     }
+    const userId = authData.user.id;
+
+    let imageUrl: string | null = null;
+    let audioUrl: string | null = null;
+
+    if (imageFile) {
+      const ext = imageFile.name.split(".").pop() || "jpg";
+      const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+      const { error: uploadErr } = await supabase.storage
+        .from(BUCKET)
+        .upload(path, imageFile, { upsert: false });
+      if (uploadErr) {
+        setError("Erreur envoi image: " + uploadErr.message);
+        setPosting(false);
+        return;
+      }
+      const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path);
+      imageUrl = urlData.publicUrl;
+    }
+
+    if (audioFile) {
+      const ext = audioFile.name.split(".").pop() || "webm";
+      const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+      const { error: uploadErr } = await supabase.storage
+        .from(BUCKET)
+        .upload(path, audioFile, { upsert: false });
+      if (uploadErr) {
+        setError("Erreur envoi vocal: " + uploadErr.message);
+        setPosting(false);
+        return;
+      }
+      const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path);
+      audioUrl = urlData.publicUrl;
+    }
+
     const { error: err } = await supabase.from("feed_posts").insert({
-      content: text,
-      created_by: authData.user.id,
+      content: text || "",
+      image_url: imageUrl,
+      audio_url: audioUrl,
+      created_by: userId,
     });
     if (err) {
       setError(err.message);
@@ -76,6 +123,10 @@ export default function BarberFeedPage() {
       return;
     }
     setContent("");
+    setImageFile(null);
+    setAudioFile(null);
+    if (imageInputRef.current) imageInputRef.current.value = "";
+    if (audioInputRef.current) audioInputRef.current.value = "";
     await loadPosts();
     setPosting(false);
   };
@@ -89,6 +140,7 @@ export default function BarberFeedPage() {
     minHeight: "100vh",
     backgroundColor: "#f3f4f6",
     padding: "24px 16px",
+    paddingTop: "60px",
     fontFamily: "'Helvetica Neue', Arial, sans-serif",
   };
 
@@ -112,18 +164,6 @@ export default function BarberFeedPage() {
   return (
     <div style={containerStyle}>
       <div style={cardStyle}>
-        <div style={{ marginBottom: "20px" }}>
-          <Link
-            href="/barber"
-            style={{
-              fontSize: "14px",
-              color: "#6b7280",
-              textDecoration: "none",
-            }}
-          >
-            ← Retour au scan
-          </Link>
-        </div>
         <h1
           style={{
             fontSize: "22px",
@@ -135,14 +175,13 @@ export default function BarberFeedPage() {
           Actualités
         </h1>
         <p style={{ fontSize: "14px", color: "#4b5563", marginBottom: "16px" }}>
-          Publie des actualités visibles sur l&apos;accueil des clients (genre
-          tweet).
+          Seul le coiffeur peut publier. Texte, image et/ou vocal : tout s&apos;affiche dans le fil des clients.
         </p>
 
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          placeholder="Écris une actualité..."
+          placeholder="Texte (optionnel si image ou vocal)..."
           maxLength={500}
           rows={3}
           style={{
@@ -159,10 +198,55 @@ export default function BarberFeedPage() {
         <div style={{ fontSize: "12px", color: "#9ca3af", marginBottom: "12px" }}>
           {content.length}/500
         </div>
+
+        <div style={{ display: "flex", gap: "10px", marginBottom: "12px", flexWrap: "wrap" }}>
+          <label
+            style={{
+              padding: "8px 14px",
+              borderRadius: "10px",
+              border: "1px solid #d1d5db",
+              fontSize: "14px",
+              cursor: "pointer",
+              backgroundColor: "#fff",
+            }}
+          >
+            {imageFile ? imageFile.name : "➕ Image"}
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
+              style={{ display: "none" }}
+            />
+          </label>
+          <label
+            style={{
+              padding: "8px 14px",
+              borderRadius: "10px",
+              border: "1px solid #d1d5db",
+              fontSize: "14px",
+              cursor: "pointer",
+              backgroundColor: "#fff",
+            }}
+          >
+            {audioFile ? audioFile.name : "🎤 Vocal"}
+            <input
+              ref={audioInputRef}
+              type="file"
+              accept="audio/*"
+              onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)}
+              style={{ display: "none" }}
+            />
+          </label>
+        </div>
+
         <button
           type="button"
           onClick={handlePost}
-          disabled={posting || !content.trim()}
+          disabled={
+            posting ||
+            (!content.trim() && !imageFile && !audioFile)
+          }
           style={{
             width: "100%",
             backgroundColor: "#111",
@@ -173,7 +257,8 @@ export default function BarberFeedPage() {
             fontSize: "15px",
             fontWeight: 500,
             cursor: posting ? "not-allowed" : "pointer",
-            opacity: posting || !content.trim() ? 0.7 : 1,
+            opacity:
+              posting || (!content.trim() && !imageFile && !audioFile) ? 0.7 : 1,
           }}
         >
           {posting ? "Publication..." : "Publier"}
@@ -210,17 +295,46 @@ export default function BarberFeedPage() {
                   borderBottom: "1px solid #e5e7eb",
                 }}
               >
-                <p
-                  style={{
-                    fontSize: "14px",
-                    color: "#111",
-                    margin: 0,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  {p.content}
-                </p>
+                {p.content ? (
+                  <p
+                    style={{
+                      fontSize: "14px",
+                      color: "#111",
+                      margin: 0,
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {p.content}
+                  </p>
+                ) : null}
+                {p.image_url && (
+                  <a
+                    href={p.image_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ display: "block", marginTop: "6px" }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={p.image_url}
+                      alt=""
+                      style={{
+                        maxWidth: "100%",
+                        maxHeight: 200,
+                        borderRadius: "8px",
+                        objectFit: "cover",
+                      }}
+                    />
+                  </a>
+                )}
+                {p.audio_url && (
+                  <audio
+                    controls
+                    src={p.audio_url}
+                    style={{ width: "100%", marginTop: "6px", height: 36 }}
+                  />
+                )}
                 <div
                   style={{
                     display: "flex",
@@ -229,12 +343,7 @@ export default function BarberFeedPage() {
                     marginTop: "6px",
                   }}
                 >
-                  <span
-                    style={{
-                      fontSize: "12px",
-                      color: "#9ca3af",
-                    }}
-                  >
+                  <span style={{ fontSize: "12px", color: "#9ca3af" }}>
                     {new Date(p.created_at).toLocaleString("fr-FR", {
                       day: "2-digit",
                       month: "2-digit",

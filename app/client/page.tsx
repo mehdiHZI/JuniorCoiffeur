@@ -16,7 +16,7 @@ export default function ClientHomePage() {
     { id: number; created_at: string; points: number | null }[]
   >([]);
   const [feedPosts, setFeedPosts] = useState<
-    { id: number; content: string; created_at: string }[]
+    { id: number; content: string; image_url: string | null; audio_url: string | null; created_at: string }[]
   >([]);
 
   useEffect(() => {
@@ -95,10 +95,10 @@ export default function ClientHomePage() {
 
       const { data: posts } = await supabase
         .from("feed_posts")
-        .select("id, content, created_at")
+        .select("id, content, image_url, audio_url, created_at")
         .order("created_at", { ascending: false })
         .limit(20);
-      setFeedPosts((posts as { id: number; content: string; created_at: string }[]) ?? []);
+      setFeedPosts((posts as { id: number; content: string; image_url: string | null; audio_url: string | null; created_at: string }[]) ?? []);
 
       setLoading(false);
     };
@@ -363,17 +363,41 @@ export default function ClientHomePage() {
                     borderBottom: "1px solid #e5e7eb",
                   }}
                 >
-                  <p
-                    style={{
-                      fontSize: "14px",
-                      color: "#111",
-                      margin: 0,
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-word",
-                    }}
-                  >
-                    {p.content}
-                  </p>
+                  {p.content ? (
+                    <p
+                      style={{
+                        fontSize: "14px",
+                        color: "#111",
+                        margin: 0,
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      {p.content}
+                    </p>
+                  ) : null}
+                  {p.image_url && (
+                    <div style={{ marginTop: "6px" }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={p.image_url}
+                        alt=""
+                        style={{
+                          maxWidth: "100%",
+                          maxHeight: 200,
+                          borderRadius: "8px",
+                          objectFit: "cover",
+                        }}
+                      />
+                    </div>
+                  )}
+                  {p.audio_url && (
+                    <audio
+                      controls
+                      src={p.audio_url}
+                      style={{ width: "100%", marginTop: "6px", height: 36 }}
+                    />
+                  )}
                   <span
                     style={{
                       fontSize: "12px",
