@@ -23,15 +23,17 @@ export default function BarberPage() {
       setClientPendingCoupe(false);
       return;
     }
-    supabase
+    void supabase
       .from("customers")
       .select("pending_coupe_offerte")
       .eq("qr_token", qrToken)
       .maybeSingle()
-      .then(({ data }) => {
-        setClientPendingCoupe(!!(data as { pending_coupe_offerte?: boolean } | null)?.pending_coupe_offerte);
-      })
-      .catch(() => setClientPendingCoupe(false));
+      .then(
+        ({ data }) => {
+          setClientPendingCoupe(!!(data as { pending_coupe_offerte?: boolean } | null)?.pending_coupe_offerte);
+        },
+        () => setClientPendingCoupe(false)
+      );
   }, [token]);
 
   useEffect(() => {
