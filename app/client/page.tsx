@@ -1,26 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
-import QRCode from "qrcode";
 
-export default function ClientPage() {
+export default function ClientHomePage() {
   const router = useRouter();
-
   const [loading, setLoading] = useState(true);
-  const [qrToken, setQrToken] = useState<string | null>(null);
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
-  const [points, setPoints] = useState<number>(0);
-
-  const qrValue = useMemo(() => {
-    return qrToken ? `FIDELITE:${qrToken}` : "";
-  }, [qrToken]);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     const run = async () => {
       setLoading(true);
-
       const { data: authData } = await supabase.auth.getUser();
       const user = authData.user;
 
@@ -29,70 +20,11 @@ export default function ClientPage() {
         return;
       }
 
-      // Récupérer le customer
-            // Récupérer le customer (0 ou 1 ligne)
-      const { data: existingCustomer, error: customerErr } = await supabase
-        .from("customers")
-        .select("id, qr_token")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (customerErr) {
-        alert(customerErr.message);
-        setLoading(false);
-        return;
-      }
-
-      let customer = existingCustomer;
-
-      // Si pas de customer, on le crée
-      if (!customer) {
-        const newToken = crypto.randomUUID();
-
-        const { data: created, error: createErr } = await supabase
-          .from("customers")
-          .insert({ user_id: user.id, qr_token: newToken })
-          .select("id, qr_token")
-          .single();
-
-        if (createErr) {
-          alert(createErr.message);
-          setLoading(false);
-          return;
-        }
-
-        customer = created;
-      }
-
-      setQrToken(customer!.qr_token);
-      // Points = somme des transactions
-      const { data: txs } = await supabase
-        .from("transactions")
-        .select("points")
-        .eq("customer_id", customer.id);
-
-      const total = (txs ?? []).reduce((acc, t) => acc + (t.points ?? 0), 0);
-      setPoints(total);
-
       setLoading(false);
     };
 
     run();
   }, [router]);
-
-  useEffect(() => {
-    const gen = async () => {
-      if (!qrValue) return;
-      const url = await QRCode.toDataURL(qrValue, { margin: 2, scale: 8 });
-      setQrDataUrl(url);
-    };
-    gen();
-  }, [qrValue]);
-
-  const logout = async () => {
-    await supabase.auth.signOut();
-    router.push("/auth");
-  };
 
   const containerStyle: React.CSSProperties = {
     minHeight: "100vh",
@@ -111,6 +43,42 @@ export default function ClientPage() {
     padding: "28px 24px",
     borderRadius: "16px",
     boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+    position: "relative",
+  };
+
+  const menuButtonStyle: React.CSSProperties = {
+    position: "absolute",
+    top: "8px",
+    left: "8px",
+    padding: "6px 10px",
+    borderRadius: "9999px",
+    border: "1px solid #d1d5db",
+    backgroundColor: "#fff",
+    fontSize: "13px",
+    cursor: "pointer",
+  };
+
+  const menuStyle: React.CSSProperties = {
+    position: "absolute",
+    top: "40px",
+    left: "8px",
+    backgroundColor: "#ffffff",
+    borderRadius: "10px",
+    boxShadow: "0 8px 20px rgba(0,0,0,0.08)",
+    border: "1px solid #e5e7eb",
+    minWidth: "160px",
+    zIndex: 10,
+    overflow: "hidden",
+  };
+
+  const menuItemStyle: React.CSSProperties = {
+    width: "100%",
+    textAlign: "left",
+    padding: "8px 12px",
+    fontSize: "14px",
+    border: "none",
+    background: "white",
+    cursor: "pointer",
   };
 
   if (loading) {
@@ -124,86 +92,71 @@ export default function ClientPage() {
   return (
     <div style={containerStyle}>
       <div style={cardStyle}>
+        <button
+          type="button"
+          onClick={() => setMenuOpen((v) => !v)}
+          style={menuButtonStyle}
+        >
+          ☰ Menu
+        </button>
+
+        {menuOpen && (
+          <div style={menuStyle}>
+            <button
+              type="button"
+              style={menuItemStyle}
+              onClick={() => {
+                setMenuOpen(false);
+                router.push("/client/qr");
+              }}
+            >
+              QR Code
+            </button>
+            <button
+              type="button"
+              style={menuItemStyle}
+              onClick={() => {
+                setMenuOpen(false);
+                router.push("/client/historique");
+              }}
+            >
+              Historique
+            </button>
+            <button
+              type="button"
+              style={menuItemStyle}
+              onClick={() => {
+                setMenuOpen(false);
+                router.push("/client/shop");
+              }}
+            >
+              Shop
+            </button>
+          </div>
+        )}
+
         <h1
           style={{
             fontSize: "22px",
             fontWeight: 600,
             marginBottom: "6px",
             color: "#111",
+            textAlign: "center",
           }}
         >
           Espace client
         </h1>
-        <p style={{ fontSize: "14px", color: "#4b5563", marginBottom: "20px" }}>
-          Montre ce QR code au coiffeur pour gagner des points.
+        <p
+          style={{
+            fontSize: "14px",
+            color: "#4b5563",
+            marginTop: "8px",
+            textAlign: "center",
+          }}
+        >
+          Page d&apos;accueil client. Utilise le menu pour accéder à ton QR
+          code, ton historique ou au shop.
         </p>
-
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: "20px",
-          }}
-        >
-          <div>
-            <div
-              style={{ fontSize: "12px", color: "#6b7280", marginBottom: "2px" }}
-            >
-              Points
-            </div>
-            <div style={{ fontSize: "28px", fontWeight: 700 }}>{points}</div>
-          </div>
-
-          <button
-            onClick={logout}
-            style={{
-              padding: "8px 14px",
-              borderRadius: "9999px",
-              border: "none",
-              backgroundColor: "#111",
-              color: "#fff",
-              fontSize: "13px",
-              fontWeight: 500,
-              cursor: "pointer",
-            }}
-          >
-            Déconnexion
-          </button>
-        </div>
-
-        <div
-          style={{
-            borderRadius: "12px",
-            border: "1px solid #e5e7eb",
-            padding: "16px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {qrDataUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={qrDataUrl}
-              alt="QR Code"
-              style={{ width: "256px", height: "256px" }}
-            />
-          ) : (
-            <div>QR en cours...</div>
-          )}
-        </div>
-
-        <div
-          style={{
-            marginTop: "12px",
-            fontSize: "12px",
-            color: "#6b7280",
-            wordBreak: "break-all",
-          }}
-        >
-          Token: {qrToken}
-        </div>
       </div>
     </div>
   );
