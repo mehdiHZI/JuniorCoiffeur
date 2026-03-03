@@ -94,46 +94,114 @@ export default function ClientPage() {
     router.push("/auth");
   };
 
+  const containerStyle: React.CSSProperties = {
+    minHeight: "100vh",
+    backgroundColor: "#f3f4f6",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "24px 16px",
+    fontFamily: "'Helvetica Neue', Arial, sans-serif",
+  };
+
+  const cardStyle: React.CSSProperties = {
+    width: "100%",
+    maxWidth: "480px",
+    backgroundColor: "#ffffff",
+    padding: "28px 24px",
+    borderRadius: "16px",
+    boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        Chargement...
+      <div style={containerStyle}>
+        <div style={cardStyle}>Chargement...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6 flex justify-center">
-      <div className="w-full max-w-md bg-white rounded-xl shadow p-6">
-        <h1 className="text-2xl font-bold mb-2">Espace client</h1>
-        <p className="text-gray-600 mb-6">
+    <div style={containerStyle}>
+      <div style={cardStyle}>
+        <h1
+          style={{
+            fontSize: "22px",
+            fontWeight: 600,
+            marginBottom: "6px",
+            color: "#111",
+          }}
+        >
+          Espace client
+        </h1>
+        <p style={{ fontSize: "14px", color: "#4b5563", marginBottom: "20px" }}>
           Montre ce QR code au coiffeur pour gagner des points.
         </p>
 
-        <div className="flex items-center justify-between mb-6">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: "20px",
+          }}
+        >
           <div>
-            <div className="text-sm text-gray-500">Points</div>
-            <div className="text-3xl font-bold">{points}</div>
+            <div
+              style={{ fontSize: "12px", color: "#6b7280", marginBottom: "2px" }}
+            >
+              Points
+            </div>
+            <div style={{ fontSize: "28px", fontWeight: 700 }}>{points}</div>
           </div>
 
           <button
             onClick={logout}
-            className="px-3 py-2 rounded bg-black text-white"
+            style={{
+              padding: "8px 14px",
+              borderRadius: "9999px",
+              border: "none",
+              backgroundColor: "#111",
+              color: "#fff",
+              fontSize: "13px",
+              fontWeight: 500,
+              cursor: "pointer",
+            }}
           >
             Déconnexion
           </button>
         </div>
 
-        <div className="border rounded-lg p-4 flex items-center justify-center">
+        <div
+          style={{
+            borderRadius: "12px",
+            border: "1px solid #e5e7eb",
+            padding: "16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
           {qrDataUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={qrDataUrl} alt="QR Code" className="w-64 h-64" />
+            <img
+              src={qrDataUrl}
+              alt="QR Code"
+              style={{ width: "256px", height: "256px" }}
+            />
           ) : (
             <div>QR en cours...</div>
           )}
         </div>
 
-        <div className="mt-4 text-xs text-gray-500 break-all">
+        <div
+          style={{
+            marginTop: "12px",
+            fontSize: "12px",
+            color: "#6b7280",
+            wordBreak: "break-all",
+          }}
+        >
           Token: {qrToken}
         </div>
       </div>

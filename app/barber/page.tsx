@@ -92,22 +92,83 @@ export default function BarberPage() {
     setToken("");
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="bg-white p-6 rounded-xl shadow w-full max-w-md">
-        <h1 className="text-2xl font-bold mb-4">Mode Coiffeur</h1>
+  const containerStyle: React.CSSProperties = {
+    minHeight: "100vh",
+    backgroundColor: "#f3f4f6",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "24px 16px",
+    fontFamily: "'Helvetica Neue', Arial, sans-serif",
+  };
 
-        <div className="flex gap-2 mb-3">
+  const cardStyle: React.CSSProperties = {
+    width: "100%",
+    maxWidth: "520px",
+    backgroundColor: "#ffffff",
+    padding: "28px 24px",
+    borderRadius: "16px",
+    boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+  };
+
+  const buttonPrimary: React.CSSProperties = {
+    flex: 1,
+    backgroundColor: "#111",
+    color: "#fff",
+    padding: "8px 12px",
+    borderRadius: "9999px",
+    border: "none",
+    fontSize: "14px",
+    cursor: "pointer",
+  };
+
+  const buttonSecondary: React.CSSProperties = {
+    flex: 1,
+    backgroundColor: "#fff",
+    color: "#111",
+    padding: "8px 12px",
+    borderRadius: "9999px",
+    border: "1px solid #d1d5db",
+    fontSize: "14px",
+    cursor: "pointer",
+  };
+
+  return (
+    <div style={containerStyle}>
+      <div style={cardStyle}>
+        <h1
+          style={{
+            fontSize: "22px",
+            fontWeight: 600,
+            marginBottom: "8px",
+            color: "#111",
+          }}
+        >
+          Mode coiffeur
+        </h1>
+
+        <p style={{ fontSize: "14px", color: "#4b5563", marginBottom: "16px" }}>
+          Scanne le QR code de ton client ou colle son contenu pour lui ajouter
+          des points.
+        </p>
+
+        <div
+          style={{
+            display: "flex",
+            gap: "8px",
+            marginBottom: "16px",
+          }}
+        >
           <button
             onClick={() => setScanOn(true)}
-            className="flex-1 bg-black text-white p-2 rounded"
+            style={buttonPrimary}
           >
             Activer la caméra
           </button>
 
           <button
             onClick={() => setScanOn(false)}
-            className="flex-1 border p-2 rounded"
+            style={buttonSecondary}
           >
             Stop
           </button>
@@ -116,8 +177,7 @@ export default function BarberPage() {
         {/* Scanner QR */}
         <div
           id="reader"
-          className="mb-4"
-          style={{ width: "100%", minHeight: 260 }}
+          style={{ width: "100%", minHeight: 260, marginBottom: "16px" }}
         />
 
         {/* Input manuel */}
@@ -126,24 +186,59 @@ export default function BarberPage() {
           placeholder="Colle ici le contenu du QR"
           value={token}
           onChange={(e) => setToken(e.target.value)}
-          className="w-full border p-2 mb-3 rounded"
+          style={{
+            width: "100%",
+            borderRadius: "10px",
+            border: "1px solid #d1d5db",
+            padding: "10px 12px",
+            marginBottom: "10px",
+            fontSize: "14px",
+          }}
         />
 
         <input
           type="number"
           value={points}
           onChange={(e) => setPoints(Number(e.target.value))}
-          className="w-full border p-2 mb-3 rounded"
+          style={{
+            width: "100%",
+            borderRadius: "10px",
+            border: "1px solid #d1d5db",
+            padding: "10px 12px",
+            marginBottom: "14px",
+            fontSize: "14px",
+          }}
         />
 
         <button
           onClick={addPoints}
-          className="w-full bg-black text-white p-2 rounded"
+          style={{
+            width: "100%",
+            backgroundColor: "#111",
+            color: "#fff",
+            padding: "12px",
+            borderRadius: "10px",
+            border: "none",
+            fontSize: "15px",
+            fontWeight: 500,
+            cursor: "pointer",
+          }}
         >
           Ajouter les points
         </button>
 
-        {message && <div className="mt-4 text-center text-sm">{message}</div>}
+        {message && (
+          <div
+            style={{
+              marginTop: "14px",
+              textAlign: "center",
+              fontSize: "13px",
+              color: "#111",
+            }}
+          >
+            {message}
+          </div>
+        )}
       </div>
     </div>
   );
