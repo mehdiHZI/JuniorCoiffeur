@@ -13,9 +13,11 @@ export default function AuthPage() {
   const [fullName, setFullName] = useState("");
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
   const handleAuth = async () => {
     setLoading(true);
+    setErrorMsg("");
 
     if (isLogin) {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -24,30 +26,23 @@ export default function AuthPage() {
       });
 
       if (error) {
-        alert(error.message);
+        setErrorMsg(error.message);
         setLoading(false);
         return;
       }
 
-      const userId = data.user?.id;
-
-      if (!userId) {
-        alert("Utilisateur introuvable");
+      const user = data.user;
+      if (!user) {
+        setErrorMsg("Connexion échouée.");
         setLoading(false);
         return;
       }
 
-      const { data: profile, error: profileErr } = await supabase
+      const { data: profile } = await supabase
         .from("profiles")
         .select("role")
-        .eq("id", userId)
+        .eq("id", user.id)
         .single();
-
-      if (profileErr) {
-        alert(profileErr.message);
-        setLoading(false);
-        return;
-      }
 
       if (profile?.role === "barber") router.push("/barber");
       else router.push("/client");
@@ -58,7 +53,7 @@ export default function AuthPage() {
       });
 
       if (error) {
-        alert(error.message);
+        setErrorMsg(error.message);
         setLoading(false);
         return;
       }
@@ -66,14 +61,12 @@ export default function AuthPage() {
       const user = data.user;
 
       if (user) {
-        // 1️⃣ créer profile
         await supabase.from("profiles").insert({
           id: user.id,
           full_name: fullName,
           role: "client",
         });
 
-        // 2️⃣ créer customer avec QR token
         await supabase.from("customers").insert({
           user_id: user.id,
           qr_token: uuidv4(),
@@ -87,17 +80,23 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-100">
-      <div className="bg-white p-8 rounded-xl shadow-md w-96">
-        <h1 className="text-2xl font-bold mb-6 text-center">
-          {isLogin ? "Connexion" : "Inscription"}
-        </h1>
+    <div className="min-h-screen flex items-center justify-center px-4">
+      <div className="w-full max-w-md card-luxe gold-glow rounded-2xl p-6 sm:p-8">
+        <div className="text-center mb-6">
+          <div className="text-xs tracking-[0.35em] text-gold uppercase">
+            Junior Coiffeur
+          </div>
+          <h1 className="text-2xl font-semibold mt-2">
+            {isLogin ? "Connexion" : "Inscription"}
+          </h1>
+          <div className="hr-gold mt-5" />
+        </div>
 
         {!isLogin && (
           <input
             type="text"
             placeholder="Nom complet"
-            className="w-full p-2 mb-3 border rounded"
+            className="w-full p-3 mb-3 rounded-xl input-luxe"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
           />
@@ -106,7 +105,7 @@ export default function AuthPage() {
         <input
           type="email"
           placeholder="Email"
-          className="w-full p-2 mb-3 border rounded"
+          className="w-full p-3 mb-3 rounded-xl input-luxe"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
@@ -114,25 +113,36 @@ export default function AuthPage() {
         <input
           type="password"
           placeholder="Mot de passe"
-          className="w-full p-2 mb-4 border rounded"
+          className="w-full p-3 mb-4 rounded-xl input-luxe"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
 
+        {errorMsg && (
+          <div className="mb-4 rounded-xl border border-red-500/25 bg-red-500/10 p-3 text-sm text-red-200">
+            {errorMsg}
+          </div>
+        )}
+
         <button
           onClick={handleAuth}
           disabled={loading}
-          className="w-full bg-black text-white p-2 rounded"
+          className="w-full py-3 rounded-xl btn-luxe transition"
         >
           {loading ? "Chargement..." : isLogin ? "Se connecter" : "S'inscrire"}
         </button>
 
-        <p
-          className="mt-4 text-center text-sm cursor-pointer text-blue-600"
+        <button
+          type="button"
+          className="mt-4 w-full text-sm text-[rgba(245,245,245,0.75)] hover:text-white transition"
           onClick={() => setIsLogin(!isLogin)}
         >
           {isLogin ? "Créer un compte" : "Déjà un compte ? Se connecter"}
-        </p>
+        </button>
+
+        <div className="mt-6 text-center text-xs text-[rgba(245,245,245,0.55)]">
+          Sécurisé • QR fidélité • Expérience premium
+        </div>
       </div>
     </div>
   );
