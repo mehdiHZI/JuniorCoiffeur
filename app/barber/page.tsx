@@ -24,7 +24,7 @@ export default function BarberPage() {
       setClientPendingCoupe(false);
       return;
     }
-    // Vérifie si la dernière transaction du client est une coupe offerte achetée (points négatifs)
+    // Vérifie si la dernière transaction du client est un achat "coupe offerte" (objet avec is_coupe_offerte)
     void (async () => {
       const { data: customer, error: customerErr } = await supabase
         .from("customers")
@@ -39,13 +39,26 @@ export default function BarberPage() {
 
       const { data: txs } = await supabase
         .from("transactions")
-        .select("points")
+        .select("points, shop_item_id")
         .eq("customer_id", (customer as { id: number }).id)
         .order("created_at", { ascending: false })
         .limit(1);
 
-      const last = (txs ?? [])[0] as { points: number | null } | undefined;
-      setClientPendingCoupe(!!last && (last.points ?? 0) < 0);
+      const last = (txs ?? [])[0] as { points: number | null; shop_item_id: number | null } | undefined;
+      if (!last || (last.points ?? 0) >= 0) {
+        setClientPendingCoupe(false);
+        return;
+      }
+      if (last.shop_item_id == null) {
+        setClientPendingCoupe(true);
+        return;
+      }
+      const { data: item } = await supabase
+        .from("shop_items")
+        .select("is_coupe_offerte")
+        .eq("id", last.shop_item_id)
+        .maybeSingle();
+      setClientPendingCoupe(!!(item as { is_coupe_offerte?: boolean } | null)?.is_coupe_offerte);
     })();
   }, [token]);
 

@@ -4,15 +4,23 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 
-const COUPE_PRIX_POINTS = 100;
+type ShopItem = {
+  id: number;
+  title: string;
+  description: string;
+  points: number;
+  is_coupe_offerte: boolean;
+};
 
 export default function ClientShopPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [customerId, setCustomerId] = useState<number | null>(null);
-  const [points, setPoints] = useState<number>(0);
-  const [pendingCoupe, setPendingCoupe] = useState(false);
+  const [points, setPoints] = useState(0);
+  const [items, setItems] = useState<ShopItem[]>([]);
+  const [pendingCoupeOfferte, setPendingCoupeOfferte] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<ShopItem | null>(null);
   const [buying, setBuying] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -27,7 +35,6 @@ export default function ClientShopPage() {
         return;
       }
 
-      // Récupérer ou créer le customer (même logique que sur la page d'accueil, sans dépendre d'une colonne optionnelle)
       const { data: existingCustomer, error: customerErr } = await supabase
         .from("customers")
         .select("id")
@@ -35,71 +42,99 @@ export default function ClientShopPage() {
         .maybeSingle();
 
       if (customerErr) {
-        console.error(customerErr.message);
         setMessage("Erreur chargement client : " + customerErr.message);
         setLoading(false);
         return;
       }
 
       let customer = existingCustomer as { id: number } | null;
-
       if (!customer) {
         const newToken = crypto.randomUUID();
-
         const { data: created, error: createErr } = await supabase
           .from("customers")
           .insert({ user_id: user.id, qr_token: newToken })
           .select("id")
           .single();
-
         if (createErr) {
-          console.error(createErr.message);
           setMessage("Erreur création client : " + createErr.message);
           setLoading(false);
           return;
         }
-
         customer = created as { id: number };
       }
 
       setCustomerId(customer.id);
+
       const { data: txs, error: txErr } = await supabase
         .from("transactions")
-        .select("points")
+        .select("points, shop_item_id")
         .eq("customer_id", customer.id)
         .order("created_at", { ascending: false });
 
       if (txErr) {
-        console.error(txErr.message);
         setMessage("Erreur chargement points : " + txErr.message);
         setLoading(false);
         return;
       }
 
       const list = txs ?? [];
-
       const total = list.reduce(
         (acc: number, t: { points: number | null }) => acc + (t.points ?? 0),
         0
       );
       setPoints(total);
-      const last = list[0] as { points: number | null } | undefined;
-      setPendingCoupe(!!last && (last.points ?? 0) < 0);
+
+      const last = list[0] as { points: number | null; shop_item_id: number | null } | undefined;
+
+      const { data: shopItems, error: itemsErr } = await supabase
+        .from("shop_items")
+        .select("id, title, description, points, is_coupe_offerte")
+        .order("id", { ascending: true });
+
+      if (itemsErr) {
+        setMessage("Erreur chargement shop : " + itemsErr.message);
+        setLoading(false);
+        return;
+      }
+      const itemList = (shopItems as ShopItem[]) ?? [];
+      setItems(itemList);
+
+      let hasPendingCoupe = false;
+      if (last && (last.points ?? 0) < 0) {
+        if (last.shop_item_id == null) hasPendingCoupe = true;
+        else {
+          const bought = itemList.find((i) => i.id === last.shop_item_id);
+          hasPendingCoupe = !!bought?.is_coupe_offerte;
+        }
+      }
+      setPendingCoupeOfferte(hasPendingCoupe);
+
       setLoading(false);
     };
 
     run();
   }, [router]);
 
+  const openConfirm = (item: ShopItem) => {
+    if (item.is_coupe_offerte && pendingCoupeOfferte) return;
+    if (points < item.points) return;
+    setSelectedItem(item);
+    setConfirmOpen(true);
+  };
+
   const handleBuy = async () => {
-    if (customerId == null || points < COUPE_PRIX_POINTS || pendingCoupe) return;
+    if (!customerId || !selectedItem) return;
+    if (points < selectedItem.points) return;
+    if (selectedItem.is_coupe_offerte && pendingCoupeOfferte) return;
+
     setBuying(true);
     setMessage(null);
 
     const { error: txError } = await supabase.from("transactions").insert({
       customer_id: customerId,
-      points: -COUPE_PRIX_POINTS,
+      points: -selectedItem.points,
       barber_user_id: null,
+      shop_item_id: selectedItem.id,
     });
 
     if (txError) {
@@ -109,26 +144,16 @@ export default function ClientShopPage() {
       return;
     }
 
-    const { error: updateError } = await supabase
-      .from("customers")
-      .update({ pending_coupe_offerte: true })
-      .eq("id", customerId);
-
     setBuying(false);
     setConfirmOpen(false);
-
-    // Toujours bloquer un nouvel achat dans la session (même si l'UPDATE en base a échoué)
-    setPendingCoupe(true);
-    setPoints((p) => p - COUPE_PRIX_POINTS);
-
-    if (updateError) {
-      setMessage(
-        "Coupe enregistrée (points déduits). Pour que ce soit pris en compte au prochain passage, exécute dans Supabase le script setup-shop.sql (étape 3 + politiques RLS)."
-      );
-      return;
-    }
-
-    setMessage("Coupe offerte achetée ! Présente-toi chez le coiffeur pour l'utiliser.");
+    setSelectedItem(null);
+    setPoints((p) => p - selectedItem.points);
+    if (selectedItem.is_coupe_offerte) setPendingCoupeOfferte(true);
+    setMessage(
+      selectedItem.is_coupe_offerte
+        ? "Coupe offerte achetée ! Présente-toi chez le coiffeur pour l'utiliser."
+        : "Achat enregistré."
+    );
   };
 
   const containerStyle: React.CSSProperties = {
@@ -161,74 +186,71 @@ export default function ClientShopPage() {
   return (
     <div style={containerStyle}>
       <div style={cardStyle}>
-        <h1
-          style={{
-            fontSize: "22px",
-            fontWeight: 600,
-            marginBottom: "8px",
-            color: "#111",
-          }}
-        >
+        <h1 style={{ fontSize: "22px", fontWeight: 600, marginBottom: "8px", color: "#111" }}>
           Shop
         </h1>
-        <p
-          style={{
-            fontSize: "14px",
-            color: "#4b5563",
-            marginBottom: "24px",
-          }}
-        >
+        <p style={{ fontSize: "14px", color: "#4b5563", marginBottom: "24px" }}>
           Tes points : <strong>{points}</strong>
         </p>
 
-        <div
-          style={{
-            border: "1px solid #e5e7eb",
-            borderRadius: "12px",
-            padding: "20px",
-            marginBottom: "12px",
-          }}
-        >
-          <div style={{ fontSize: "16px", fontWeight: 600, color: "#111" }}>
-            Coupe offerte
-          </div>
-          <div style={{ fontSize: "14px", color: "#6b7280", marginTop: "4px" }}>
-            {COUPE_PRIX_POINTS} points
-          </div>
-          {pendingCoupe ? (
-            <p
-              style={{
-                marginTop: "14px",
-                fontSize: "13px",
-                color: "#b45309",
-                backgroundColor: "#fef3c7",
-                padding: "10px 12px",
-                borderRadius: "8px",
-              }}
-            >
-              Vous avez déjà une coupe offerte en attente. Présentez-vous chez le coiffeur pour l&apos;utiliser ; vous pourrez en racheter une après.
-            </p>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmOpen(true)}
-              disabled={points < COUPE_PRIX_POINTS}
-              style={{
-                marginTop: "14px",
-                padding: "10px 20px",
-                borderRadius: "10px",
-                border: "none",
-                backgroundColor: points >= COUPE_PRIX_POINTS ? "#111" : "#d1d5db",
-                color: "#fff",
-                fontSize: "14px",
-                fontWeight: 500,
-                cursor: points >= COUPE_PRIX_POINTS ? "pointer" : "not-allowed",
-              }}
-            >
-              Acheter
-            </button>
-          )}
-        </div>
+        {items.length === 0 ? (
+          <p style={{ fontSize: "14px", color: "#6b7280" }}>Aucun objet au shop pour l&apos;instant.</p>
+        ) : (
+          items.map((item) => {
+            const isCoupePending = item.is_coupe_offerte && pendingCoupeOfferte;
+            const canBuy = points >= item.points && !isCoupePending;
+            return (
+              <div
+                key={item.id}
+                style={{
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "12px",
+                  padding: "20px",
+                  marginBottom: "12px",
+                }}
+              >
+                <div style={{ fontSize: "16px", fontWeight: 600, color: "#111" }}>{item.title}</div>
+                {item.description && (
+                  <div style={{ fontSize: "14px", color: "#6b7280", marginTop: "4px" }}>{item.description}</div>
+                )}
+                <div style={{ fontSize: "14px", color: "#4b5563", marginTop: "6px" }}>{item.points} points</div>
+                {isCoupePending ? (
+                  <p
+                    style={{
+                      marginTop: "14px",
+                      fontSize: "13px",
+                      color: "#b45309",
+                      backgroundColor: "#fef3c7",
+                      padding: "10px 12px",
+                      borderRadius: "8px",
+                    }}
+                  >
+                    Vous avez déjà une coupe offerte en attente. Présentez-vous chez le coiffeur pour l&apos;utiliser.
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => openConfirm(item)}
+                    disabled={!canBuy}
+                    style={{
+                      marginTop: "14px",
+                      padding: "10px 20px",
+                      borderRadius: "10px",
+                      border: "none",
+                      backgroundColor: canBuy ? "#111" : "#d1d5db",
+                      color: "#fff",
+                      fontSize: "14px",
+                      fontWeight: 500,
+                      cursor: canBuy ? "pointer" : "not-allowed",
+                    }}
+                  >
+                    Acheter
+                  </button>
+                )}
+              </div>
+            );
+          })
+        )}
 
         {message && (
           <p
@@ -243,7 +265,7 @@ export default function ClientShopPage() {
         )}
       </div>
 
-      {confirmOpen && (
+      {confirmOpen && selectedItem && (
         <div
           style={{
             position: "fixed",
@@ -268,17 +290,10 @@ export default function ClientShopPage() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <p
-              style={{
-                fontSize: "16px",
-                fontWeight: 500,
-                color: "#111",
-                marginBottom: "20px",
-              }}
-            >
-              Êtes-vous sûr d&apos;acheter ?
+            <p style={{ fontSize: "16px", fontWeight: 500, color: "#111", marginBottom: "8px" }}>
+              Acheter « {selectedItem.title} » pour {selectedItem.points} points ?
             </p>
-            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "20px" }}>
               <button
                 type="button"
                 onClick={() => !buying && setConfirmOpen(false)}
@@ -318,4 +333,3 @@ export default function ClientShopPage() {
     </div>
   );
 }
-
