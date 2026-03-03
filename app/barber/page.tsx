@@ -8,9 +8,31 @@ export default function BarberPage() {
   const [token, setToken] = useState("");
   const [points, setPoints] = useState(10);
   const [message, setMessage] = useState("");
+  const [clientPendingCoupe, setClientPendingCoupe] = useState(false);
 
   const [scanOn, setScanOn] = useState(false);
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+
+  useEffect(() => {
+    if (!token.startsWith("FIDELITE:")) {
+      setClientPendingCoupe(false);
+      return;
+    }
+    const qrToken = token.replace("FIDELITE:", "").trim();
+    if (!qrToken) {
+      setClientPendingCoupe(false);
+      return;
+    }
+    supabase
+      .from("customers")
+      .select("pending_coupe_offerte")
+      .eq("qr_token", qrToken)
+      .maybeSingle()
+      .then(({ data }) => {
+        setClientPendingCoupe(!!(data as { pending_coupe_offerte?: boolean } | null)?.pending_coupe_offerte);
+      })
+      .catch(() => setClientPendingCoupe(false));
+  }, [token]);
 
   useEffect(() => {
     if (!scanOn) return;
@@ -92,6 +114,12 @@ export default function BarberPage() {
       return;
     }
 
+    await supabase
+      .from("customers")
+      .update({ pending_coupe_offerte: false })
+      .eq("id", customer.id);
+
+    setClientPendingCoupe(false);
     setMessage("Points ajoutés ✅");
     setToken("");
   };

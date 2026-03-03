@@ -11,6 +11,7 @@ export default function ClientShopPage() {
   const [loading, setLoading] = useState(true);
   const [customerId, setCustomerId] = useState<number | null>(null);
   const [points, setPoints] = useState<number>(0);
+  const [pendingCoupe, setPendingCoupe] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [buying, setBuying] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -28,7 +29,7 @@ export default function ClientShopPage() {
 
       const { data: customer, error: customerErr } = await supabase
         .from("customers")
-        .select("id")
+        .select("id, pending_coupe_offerte")
         .eq("user_id", user.id)
         .maybeSingle();
 
@@ -38,6 +39,7 @@ export default function ClientShopPage() {
       }
 
       setCustomerId(customer.id);
+      setPendingCoupe(!!(customer as { pending_coupe_offerte?: boolean }).pending_coupe_offerte);
 
       const { data: txs } = await supabase
         .from("transactions")
@@ -56,26 +58,39 @@ export default function ClientShopPage() {
   }, [router]);
 
   const handleBuy = async () => {
-    if (customerId == null || points < COUPE_PRIX_POINTS) return;
+    if (customerId == null || points < COUPE_PRIX_POINTS || pendingCoupe) return;
     setBuying(true);
     setMessage(null);
 
-    const { error } = await supabase.from("transactions").insert({
+    const { error: txError } = await supabase.from("transactions").insert({
       customer_id: customerId,
       points: -COUPE_PRIX_POINTS,
       barber_user_id: null,
     });
 
-    setBuying(false);
-    setConfirmOpen(false);
-
-    if (error) {
-      setMessage("Erreur : " + error.message);
+    if (txError) {
+      setBuying(false);
+      setConfirmOpen(false);
+      setMessage("Erreur : " + txError.message);
       return;
     }
 
+    const { error: updateError } = await supabase
+      .from("customers")
+      .update({ pending_coupe_offerte: true })
+      .eq("id", customerId);
+
+    setBuying(false);
+    setConfirmOpen(false);
+
+    if (updateError) {
+      setMessage("Achat enregistré mais erreur de suivi. " + updateError.message);
+      return;
+    }
+
+    setPendingCoupe(true);
     setPoints((p) => p - COUPE_PRIX_POINTS);
-    setMessage("Coupe offerte achetée ! 100 points ont été déduits.");
+    setMessage("Coupe offerte achetée ! Présente-toi chez le coiffeur pour l'utiliser.");
   };
 
   const containerStyle: React.CSSProperties = {
@@ -142,24 +157,39 @@ export default function ClientShopPage() {
           <div style={{ fontSize: "14px", color: "#6b7280", marginTop: "4px" }}>
             {COUPE_PRIX_POINTS} points
           </div>
-          <button
-            type="button"
-            onClick={() => setConfirmOpen(true)}
-            disabled={points < COUPE_PRIX_POINTS}
-            style={{
-              marginTop: "14px",
-              padding: "10px 20px",
-              borderRadius: "10px",
-              border: "none",
-              backgroundColor: points >= COUPE_PRIX_POINTS ? "#111" : "#d1d5db",
-              color: "#fff",
-              fontSize: "14px",
-              fontWeight: 500,
-              cursor: points >= COUPE_PRIX_POINTS ? "pointer" : "not-allowed",
-            }}
-          >
-            Acheter
-          </button>
+          {pendingCoupe ? (
+            <p
+              style={{
+                marginTop: "14px",
+                fontSize: "13px",
+                color: "#b45309",
+                backgroundColor: "#fef3c7",
+                padding: "10px 12px",
+                borderRadius: "8px",
+              }}
+            >
+              Vous avez déjà une coupe offerte en attente. Présentez-vous chez le coiffeur pour l&apos;utiliser ; vous pourrez en racheter une après.
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmOpen(true)}
+              disabled={points < COUPE_PRIX_POINTS}
+              style={{
+                marginTop: "14px",
+                padding: "10px 20px",
+                borderRadius: "10px",
+                border: "none",
+                backgroundColor: points >= COUPE_PRIX_POINTS ? "#111" : "#d1d5db",
+                color: "#fff",
+                fontSize: "14px",
+                fontWeight: 500,
+                cursor: points >= COUPE_PRIX_POINTS ? "pointer" : "not-allowed",
+              }}
+            >
+              Acheter
+            </button>
+          )}
         </div>
 
         {message && (

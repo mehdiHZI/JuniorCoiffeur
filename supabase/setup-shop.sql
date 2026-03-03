@@ -6,6 +6,9 @@ ALTER TABLE transactions
 DROP CONSTRAINT IF EXISTS transactions_points_check;
 
 -- 2) Optionnel : si l’achat échoue sur barber_user_id, autoriser null pour les achats
--- (ignorer l’erreur si la colonne est déjà nullable)
 ALTER TABLE transactions
 ALTER COLUMN barber_user_id DROP NOT NULL;
+
+-- 3) Une seule coupe offerte en attente par client jusqu’au prochain scan du coiffeur
+ALTER TABLE customers
+ADD COLUMN IF NOT EXISTS pending_coupe_offerte boolean NOT NULL DEFAULT false;
