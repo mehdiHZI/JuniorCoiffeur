@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { Html5QrcodeScanner } from "html5-qrcode";
+import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
 
 export default function BarberPage() {
   const [token, setToken] = useState("");
@@ -20,7 +20,11 @@ export default function BarberPage() {
     // crée le scanner au moment où on clique "Activer la caméra"
     const scanner = new Html5QrcodeScanner(
       "reader",
-      { fps: 5, qrbox: 250 },
+      {
+        fps: 5,
+        qrbox: 250,
+        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
+      },
       false
     );
     scannerRef.current = scanner;
