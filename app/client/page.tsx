@@ -74,8 +74,7 @@ export default function ClientHomePage() {
             textAlign: "center",
           }}
         >
-          Page d&apos;accueil client. Utilise le menu en haut à gauche pour accéder
-          à ton QR code, ton historique ou au shop.
+          Page d&apos;Bienvenue chez chriscut ! 
         </p>
       </div>
     </div>
