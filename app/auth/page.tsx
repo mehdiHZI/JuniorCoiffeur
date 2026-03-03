@@ -128,4 +128,62 @@ export default function AuthPage() {
       </div>
     </div>
   );
-}
+}return (
+  <div className="flex min-h-screen items-center justify-center bg-gray-100">
+    <div className="bg-white p-8 rounded-xl shadow-md w-96">
+      {/* ✅ Titre salon plus gros */}
+      <div className="text-center mb-6">
+        <div className="text-xs tracking-[0.35em] text-gray-500 uppercase">
+          Junior Coiffeur
+        </div>
+        <h1 className="text-3xl font-bold mt-2">
+          {isLogin ? "Connexion" : "Inscription"}
+        </h1>
+      </div>
+
+      {!isLogin && (
+        <input
+          type="text"
+          placeholder="Nom complet"
+          className="w-full p-2 mb-4 border rounded"
+          value={fullName}
+          onChange={(e) => setFullName(e.target.value)}
+        />
+      )}
+
+      <input
+        type="email"
+        placeholder="Email"
+        className="w-full p-2 mb-4 border rounded"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+      />
+
+      {/* ✅ plus d’espace ici */}
+      <input
+        type="password"
+        placeholder="Mot de passe"
+        className="w-full p-2 mb-6 border rounded"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+
+      <button
+        onClick={handleAuth}
+        disabled={loading}
+        className="w-full bg-black text-white p-2 rounded"
+      >
+        {loading ? "Chargement..." : isLogin ? "Se connecter" : "S'inscrire"}
+      </button>
+
+      {/* ✅ bouton “Créer un compte” pas blanc */}
+      <button
+        type="button"
+        className="mt-4 w-full text-sm text-gray-700 hover:text-black underline"
+        onClick={() => setIsLogin(!isLogin)}
+      >
+        {isLogin ? "Créer un compte" : "Déjà un compte ? Se connecter"}
+      </button>
+    </div>
+  </div>
+);
