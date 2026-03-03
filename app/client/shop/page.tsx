@@ -131,13 +131,17 @@ export default function ClientShopPage() {
     setBuying(false);
     setConfirmOpen(false);
 
+    // Toujours bloquer un nouvel achat dans la session (même si l'UPDATE en base a échoué)
+    setPendingCoupe(true);
+    setPoints((p) => p - COUPE_PRIX_POINTS);
+
     if (updateError) {
-      setMessage("Achat enregistré mais erreur de suivi. " + updateError.message);
+      setMessage(
+        "Coupe enregistrée (points déduits). Pour que ce soit pris en compte au prochain passage, exécute dans Supabase le script setup-shop.sql (étape 3 + politiques RLS)."
+      );
       return;
     }
 
-    setPendingCoupe(true);
-    setPoints((p) => p - COUPE_PRIX_POINTS);
     setMessage("Coupe offerte achetée ! Présente-toi chez le coiffeur pour l'utiliser.");
   };
 
