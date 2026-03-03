@@ -7,6 +7,12 @@ import { useRouter } from "next/navigation";
 export default function ClientHomePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [points, setPoints] = useState<number>(0);
+  const [recentVisits, setRecentVisits] = useState<
+    { id: number; created_at: string; points: number | null }[]
+  >([]);
 
   useEffect(() => {
     const run = async () => {
@@ -18,6 +24,69 @@ export default function ClientHomePage() {
         router.push("/auth");
         return;
       }
+
+      setUserId(user.id);
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("avatar_url")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (profile?.avatar_url) {
+        setAvatarUrl(profile.avatar_url as string);
+      }
+
+      const { data: existingCustomer, error: customerErr } = await supabase
+        .from("customers")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (customerErr) {
+        console.error(customerErr.message);
+        setLoading(false);
+        return;
+      }
+
+      let customer = existingCustomer as { id: number } | null;
+
+      if (!customer) {
+        const newToken = crypto.randomUUID();
+
+        const { data: created, error: createErr } = await supabase
+          .from("customers")
+          .insert({ user_id: user.id, qr_token: newToken })
+          .select("id")
+          .single();
+
+        if (createErr) {
+          console.error(createErr.message);
+          setLoading(false);
+          return;
+        }
+
+        customer = created as { id: number };
+      }
+
+      const { data: txs } = await supabase
+        .from("transactions")
+        .select("points")
+        .eq("customer_id", customer.id);
+
+      const total = (txs ?? []).reduce(
+        (acc, t: { points: number | null }) => acc + (t.points ?? 0),
+        0
+      );
+      setPoints(total);
+
+      const { data: lastTxs } = await supabase
+        .from("transactions")
+        .select("id, points, created_at")
+        .eq("customer_id", customer.id)
+        .order("created_at", { ascending: false })
+        .limit(3);
+
+      setRecentVisits((lastTxs as any) ?? []);
 
       setLoading(false);
     };
@@ -42,6 +111,66 @@ export default function ClientHomePage() {
     padding: "28px 24px",
     borderRadius: "16px",
     boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+  };
+
+  const avatarWrapperStyle: React.CSSProperties = {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    marginTop: "16px",
+    marginBottom: "20px",
+  };
+
+  const avatarCircleStyle: React.CSSProperties = {
+    width: "96px",
+    height: "96px",
+    borderRadius: "9999px",
+    overflow: "hidden",
+    backgroundColor: "#e5e7eb",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "32px",
+    fontWeight: 600,
+    color: "#9ca3af",
+  };
+
+  const uploadLabelStyle: React.CSSProperties = {
+    marginTop: "8px",
+    fontSize: "13px",
+    color: "#111",
+    cursor: "pointer",
+    textDecoration: "underline",
+  };
+
+  const handleAvatarChange = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file || !userId) return;
+
+    const ext = file.name.split(".").pop();
+    const filePath = `${userId}/${Date.now()}.${ext}`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from("avatars")
+      .upload(filePath, file, { upsert: true });
+
+    if (uploadErr) {
+      console.error(uploadErr.message);
+      return;
+    }
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("avatars").getPublicUrl(filePath);
+
+    setAvatarUrl(publicUrl);
+
+    await supabase
+      .from("profiles")
+      .update({ avatar_url: publicUrl })
+      .eq("id", userId);
   };
 
   if (loading) {
@@ -74,8 +203,82 @@ export default function ClientHomePage() {
             textAlign: "center",
           }}
         >
-          Page d&apos;Bienvenue chez chriscut ! 
+          Page d&apos;accueil client. Utilise le menu en haut à gauche pour accéder
+          à ton QR code, ton historique ou au shop.
         </p>
+
+        <div style={avatarWrapperStyle}>
+          <div style={avatarCircleStyle}>
+            {avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={avatarUrl}
+                alt="Avatar"
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
+            ) : (
+              "?"
+            )}
+          </div>
+          <label style={uploadLabelStyle}>
+            Changer la photo
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarChange}
+              style={{ display: "none" }}
+            />
+          </label>
+          <div
+            style={{
+              marginTop: "10px",
+              fontSize: "14px",
+              color: "#4b5563",
+            }}
+          >
+            Points cumulés :{" "}
+            <span style={{ fontWeight: 600, color: "#111" }}>{points}</span>
+          </div>
+        </div>
+
+        <div>
+          <h2
+            style={{
+              fontSize: "16px",
+              fontWeight: 600,
+              marginBottom: "6px",
+              color: "#111",
+            }}
+          >
+            Dernières visites
+          </h2>
+          {recentVisits.length === 0 ? (
+            <p style={{ fontSize: "13px", color: "#6b7280" }}>
+              Pas encore de visites enregistrées.
+            </p>
+          ) : (
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              {recentVisits.map((v) => (
+                <li
+                  key={v.id}
+                  style={{
+                    fontSize: "13px",
+                    color: "#4b5563",
+                    padding: "4px 0",
+                    borderBottom: "1px solid #e5e7eb",
+                  }}
+                >
+                  {new Date(v.created_at).toLocaleDateString("fr-FR", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "2-digit",
+                  })}{" "}
+                  – {v.points ?? 0} points
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );
