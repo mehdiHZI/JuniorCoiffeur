@@ -27,24 +27,55 @@ export default function ClientShopPage() {
         return;
       }
 
-      const { data: customer, error: customerErr } = await supabase
+      // Récupérer ou créer le customer (même logique que sur la page d'accueil)
+      const { data: existingCustomer, error: customerErr } = await supabase
         .from("customers")
         .select("id, pending_coupe_offerte")
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (customerErr || !customer) {
+      if (customerErr) {
+        console.error(customerErr.message);
+        setMessage("Erreur chargement client : " + customerErr.message);
         setLoading(false);
         return;
       }
 
-      setCustomerId(customer.id);
-      setPendingCoupe(!!(customer as { pending_coupe_offerte?: boolean }).pending_coupe_offerte);
+      let customer = existingCustomer as { id: number; pending_coupe_offerte?: boolean } | null;
 
-      const { data: txs } = await supabase
+      if (!customer) {
+        const newToken = crypto.randomUUID();
+
+        const { data: created, error: createErr } = await supabase
+          .from("customers")
+          .insert({ user_id: user.id, qr_token: newToken })
+          .select("id, pending_coupe_offerte")
+          .single();
+
+        if (createErr) {
+          console.error(createErr.message);
+          setMessage("Erreur création client : " + createErr.message);
+          setLoading(false);
+          return;
+        }
+
+        customer = created as { id: number; pending_coupe_offerte?: boolean };
+      }
+
+      setCustomerId(customer.id);
+      setPendingCoupe(!!customer.pending_coupe_offerte);
+
+      const { data: txs, error: txErr } = await supabase
         .from("transactions")
         .select("points")
         .eq("customer_id", customer.id);
+
+      if (txErr) {
+        console.error(txErr.message);
+        setMessage("Erreur chargement points : " + txErr.message);
+        setLoading(false);
+        return;
+      }
 
       const total = (txs ?? []).reduce(
         (acc: number, t: { points: number | null }) => acc + (t.points ?? 0),
