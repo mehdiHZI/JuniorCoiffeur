@@ -44,8 +44,7 @@ export default function AuthPage() {
         .eq("id", user.id)
         .single();
 
-      if (profile?.role === "barber") router.push("/barber");
-      else router.push("/client");
+      router.push(profile?.role === "barber" ? "/barber" : "/client");
     } else {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -79,124 +78,120 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0c10] text-white flex items-center justify-center px-4">
-      <div className="w-full max-w-4xl overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-[0_30px_120px_rgba(0,0,0,0.65)]">
-        <div className="grid md:grid-cols-2">
-          {/* Left: Brand panel */}
-          <div className="p-8 md:p-10 bg-[linear-gradient(135deg,rgba(255,255,255,0.10),rgba(255,255,255,0.02))]">
-            <div className="text-xs tracking-[0.35em] uppercase text-white/60">
-              Junior Coiffeur
-            </div>
+    <div className="min-h-screen bg-[#07080b] text-[#0e0f12] flex items-center justify-center px-4 py-10">
+      {/* subtle top wave */}
+      <div className="pointer-events-none fixed inset-x-0 top-0 h-48 bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.10),rgba(255,255,255,0)_60%)]" />
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(255,255,255,0.06),rgba(0,0,0,0)_40%),radial-gradient(circle_at_80%_0%,rgba(255,255,255,0.05),rgba(0,0,0,0)_45%)]" />
 
-            <h1 className="mt-4 text-4xl font-semibold leading-tight">
-              Une expérience
-              <span className="block text-white/70">premium.</span>
-            </h1>
-
-            <p className="mt-5 text-sm text-white/60 leading-relaxed">
-              Fidélité par QR, actualités, et boutique. Conçu pour être simple,
-              rapide, et élégant.
-            </p>
-
-            <div className="mt-8 grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs text-white/60">Fidélité</div>
-                <div className="mt-1 text-sm">QR + points</div>
+      <div className="w-full max-w-3xl">
+        <div className="rounded-2xl overflow-hidden border border-white/10 shadow-[0_30px_120px_rgba(0,0,0,0.7)]">
+          {/* header bar */}
+          <div className="bg-[#0b0c10] border-b border-white/10 px-6 py-5 text-white">
+            <div className="text-center">
+              <div className="text-sm tracking-wide text-white/70">
+                Junior Coiffeur
               </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs text-white/60">Actus</div>
-                <div className="mt-1 text-sm">Salon live</div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs text-white/60">Boutique</div>
-                <div className="mt-1 text-sm">Points & €</div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs text-white/60">Support</div>
-                <div className="mt-1 text-sm">Inclus</div>
-              </div>
+              <h1 className="mt-2 text-3xl font-semibold">
+                {isLogin ? "Connexion" : "Inscription"}
+              </h1>
+              <p className="mt-2 text-sm text-white/60">
+                Sécurisé • QR fidélité • Expérience premium
+              </p>
             </div>
           </div>
 
-          {/* Right: Form panel */}
-          <div className="p-8 md:p-10 bg-[#0b0c10]">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs tracking-[0.25em] uppercase text-white/50">
-                  Accès
-                </div>
-                <h2 className="mt-2 text-2xl font-semibold">
-                  {isLogin ? "Connexion" : "Créer un compte"}
-                </h2>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setIsLogin(!isLogin)}
-                className="text-sm text-white/70 hover:text-white transition"
-              >
-                {isLogin ? "Inscription" : "Connexion"}
-              </button>
-            </div>
-
-            <div className="mt-8 space-y-5">
+          {/* form */}
+          <div className="bg-white px-6 py-7 md:px-10 md:py-10">
+            <div className="max-w-xl mx-auto">
               {!isLogin && (
-                <div>
-                  <label className="text-sm text-white/60">Nom complet</label>
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-[#2a2e36]">
+                    Nom complet <span className="text-red-600">*</span>
+                  </label>
                   <input
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/30 outline-none focus:border-white/30 transition"
+                    className="mt-2 w-full rounded-lg border border-[#d7dbe3] bg-[#f6f8fb] px-4 py-3 outline-none focus:border-[#8a94a6] focus:bg-white transition"
                     placeholder="Ex: Mehdi"
                   />
                 </div>
               )}
 
-              <div>
-                <label className="text-sm text-white/60">Email</label>
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-[#2a2e36]">
+                  Email <span className="text-red-600">*</span>
+                </label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/30 outline-none focus:border-white/30 transition"
+                  className="mt-2 w-full rounded-lg border border-[#d7dbe3] bg-[#f6f8fb] px-4 py-3 outline-none focus:border-[#8a94a6] focus:bg-white transition"
                   placeholder="ex: mehdi@mail.com"
                 />
               </div>
 
-              <div>
-                <label className="text-sm text-white/60">Mot de passe</label>
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-[#2a2e36]">
+                  Mot de passe <span className="text-red-600">*</span>
+                </label>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/30 outline-none focus:border-white/30 transition"
+                  className="mt-2 w-full rounded-lg border border-[#d7dbe3] bg-[#f6f8fb] px-4 py-3 outline-none focus:border-[#8a94a6] focus:bg-white transition"
                   placeholder="••••••••"
                 />
               </div>
 
               {err && (
-                <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                   {err}
                 </div>
               )}
 
+              {/* primary button (CAS-like yellow but "platinum" vibe) */}
               <button
                 onClick={handleAuth}
                 disabled={loading}
-                className="w-full rounded-xl bg-white text-black py-3 font-medium hover:bg-white/90 transition disabled:opacity-60"
+                className="w-full rounded-lg py-3 font-semibold tracking-wide text-[#111318]
+                           bg-[linear-gradient(180deg,#e7e9ee,#cfd4dd)]
+                           shadow-[0_6px_18px_rgba(0,0,0,0.12)]
+                           hover:brightness-[0.98] active:brightness-[0.96]
+                           disabled:opacity-60"
               >
                 {loading
                   ? "Chargement..."
                   : isLogin
-                  ? "Se connecter"
-                  : "Créer mon compte"}
+                  ? "SE CONNECTER"
+                  : "CRÉER MON COMPTE"}
               </button>
 
-              <div className="text-center text-xs text-white/40">
-                En continuant, tu acceptes les conditions d’utilisation.
-              </div>
+              {/* separator like CAS */}
+              <div className="my-6 h-px bg-[#e7e9ee]" />
+
+              {/* secondary action */}
+              <button
+                type="button"
+                onClick={() => setIsLogin(!isLogin)}
+                className="w-full rounded-lg py-3 font-semibold text-white
+                           bg-[#0b0c10]
+                           shadow-[0_6px_18px_rgba(0,0,0,0.18)]
+                           hover:bg-black transition"
+              >
+                {isLogin ? "Créer un compte" : "Déjà un compte ? Se connecter"}
+              </button>
+
+              <p className="mt-6 text-center text-xs text-[#6b7280]">
+                Pour des raisons de sécurité, veuillez vous déconnecter lorsque
+                vous avez terminé.
+              </p>
             </div>
           </div>
+        </div>
+
+        {/* small footer */}
+        <div className="mt-6 text-center text-xs text-white/40">
+          © {new Date().getFullYear()} Junior Coiffeur
         </div>
       </div>
     </div>
