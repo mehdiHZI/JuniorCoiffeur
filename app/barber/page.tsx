@@ -273,6 +273,72 @@ export default function BarberPage() {
           Ajouter les points
         </button>
 
+        {clientPendingCoupe && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              backgroundColor: "rgba(0,0,0,0.4)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 100,
+              padding: "16px",
+            }}
+            onClick={() => setClientPendingCoupe(false)}
+          >
+            <div
+              style={{
+                backgroundColor: "#fff",
+                borderRadius: "16px",
+                padding: "24px",
+                maxWidth: "320px",
+                width: "100%",
+                boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
+                textAlign: "center",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p
+                style={{
+                  fontSize: "16px",
+                  fontWeight: 600,
+                  color: "#111",
+                  marginBottom: "8px",
+                }}
+              >
+                Coupe gratuite
+              </p>
+              <p
+                style={{
+                  fontSize: "14px",
+                  color: "#4b5563",
+                  marginBottom: "20px",
+                }}
+              >
+                Ce client a pris une coupe gratuite dans le shop.
+              </p>
+              <button
+                type="button"
+                onClick={() => setClientPendingCoupe(false)}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  borderRadius: "10px",
+                  border: "none",
+                  backgroundColor: "#111",
+                  color: "#fff",
+                  fontSize: "14px",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        )}
+
         {message && (
           <div
             style={{
