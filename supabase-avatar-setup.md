@@ -2,7 +2,13 @@
 
 Pour que la photo de profil s’enregistre et s’affiche correctement :
 
-## 1. Stockage (Storage)
+## Méthode rapide
+
+Ouvre **Supabase** → **SQL Editor** → **New query**, copie le contenu de **`supabase/setup-avatars.sql`**, exécute. Puis recharge l’app et réessaie « Changer la photo ».
+
+---
+
+## 1. Stockage (Storage) – manuel
 
 - Dans le **tableau de bord Supabase** → **Storage** → **New bucket**.
 - Nom du bucket : **`avatars`** (exactement).
