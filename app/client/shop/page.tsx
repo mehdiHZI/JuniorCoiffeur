@@ -28,11 +28,28 @@ export default function ClientShopPage() {
       }
 
       // Récupérer ou créer le customer (même logique que sur la page d'accueil)
-      const { data: existingCustomer, error: customerErr } = await supabase
+      // On essaie d'abord avec pending_coupe_offerte ; si la colonne n'existe pas encore, on charge sans.
+      let existingCustomer: { id: number; pending_coupe_offerte?: boolean } | null = null;
+      let customerErr: { message: string } | null = null;
+
+      const resWithPending = await supabase
         .from("customers")
         .select("id, pending_coupe_offerte")
         .eq("user_id", user.id)
         .maybeSingle();
+
+      if (resWithPending.error?.message?.includes("pending_coupe_offerte")) {
+        const resIdOnly = await supabase
+          .from("customers")
+          .select("id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        customerErr = resIdOnly.error;
+        existingCustomer = resIdOnly.data as { id: number } | null;
+      } else {
+        customerErr = resWithPending.error;
+        existingCustomer = resWithPending.data as { id: number; pending_coupe_offerte?: boolean } | null;
+      }
 
       if (customerErr) {
         console.error(customerErr.message);
@@ -41,7 +58,7 @@ export default function ClientShopPage() {
         return;
       }
 
-      let customer = existingCustomer as { id: number; pending_coupe_offerte?: boolean } | null;
+      let customer = existingCustomer;
 
       if (!customer) {
         const newToken = crypto.randomUUID();
@@ -49,7 +66,7 @@ export default function ClientShopPage() {
         const { data: created, error: createErr } = await supabase
           .from("customers")
           .insert({ user_id: user.id, qr_token: newToken })
-          .select("id, pending_coupe_offerte")
+          .select("id")
           .single();
 
         if (createErr) {
@@ -59,11 +76,11 @@ export default function ClientShopPage() {
           return;
         }
 
-        customer = created as { id: number; pending_coupe_offerte?: boolean };
+        customer = created as { id: number };
       }
 
       setCustomerId(customer.id);
-      setPendingCoupe(!!customer.pending_coupe_offerte);
+      setPendingCoupe(!!(customer as { pending_coupe_offerte?: boolean }).pending_coupe_offerte);
 
       const { data: txs, error: txErr } = await supabase
         .from("transactions")
