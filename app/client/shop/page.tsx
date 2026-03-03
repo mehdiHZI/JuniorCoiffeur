@@ -27,29 +27,12 @@ export default function ClientShopPage() {
         return;
       }
 
-      // Récupérer ou créer le customer (même logique que sur la page d'accueil)
-      // On essaie d'abord avec pending_coupe_offerte ; si la colonne n'existe pas encore, on charge sans.
-      let existingCustomer: { id: number; pending_coupe_offerte?: boolean } | null = null;
-      let customerErr: { message: string } | null = null;
-
-      const resWithPending = await supabase
+      // Récupérer ou créer le customer (même logique que sur la page d'accueil, sans dépendre d'une colonne optionnelle)
+      const { data: existingCustomer, error: customerErr } = await supabase
         .from("customers")
-        .select("id, pending_coupe_offerte")
+        .select("id")
         .eq("user_id", user.id)
         .maybeSingle();
-
-      if (resWithPending.error?.message?.includes("pending_coupe_offerte")) {
-        const resIdOnly = await supabase
-          .from("customers")
-          .select("id")
-          .eq("user_id", user.id)
-          .maybeSingle();
-        customerErr = resIdOnly.error;
-        existingCustomer = resIdOnly.data as { id: number } | null;
-      } else {
-        customerErr = resWithPending.error;
-        existingCustomer = resWithPending.data as { id: number; pending_coupe_offerte?: boolean } | null;
-      }
 
       if (customerErr) {
         console.error(customerErr.message);
@@ -58,7 +41,7 @@ export default function ClientShopPage() {
         return;
       }
 
-      let customer = existingCustomer;
+      let customer = existingCustomer as { id: number } | null;
 
       if (!customer) {
         const newToken = crypto.randomUUID();
@@ -80,12 +63,11 @@ export default function ClientShopPage() {
       }
 
       setCustomerId(customer.id);
-      setPendingCoupe(!!(customer as { pending_coupe_offerte?: boolean }).pending_coupe_offerte);
-
       const { data: txs, error: txErr } = await supabase
         .from("transactions")
         .select("points")
-        .eq("customer_id", customer.id);
+        .eq("customer_id", customer.id)
+        .order("created_at", { ascending: false });
 
       if (txErr) {
         console.error(txErr.message);
@@ -94,11 +76,15 @@ export default function ClientShopPage() {
         return;
       }
 
-      const total = (txs ?? []).reduce(
+      const list = txs ?? [];
+
+      const total = list.reduce(
         (acc: number, t: { points: number | null }) => acc + (t.points ?? 0),
         0
       );
       setPoints(total);
+      const last = list[0] as { points: number | null } | undefined;
+      setPendingCoupe(!!last && (last.points ?? 0) < 0);
       setLoading(false);
     };
 

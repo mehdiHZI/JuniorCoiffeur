@@ -23,17 +23,29 @@ export default function BarberPage() {
       setClientPendingCoupe(false);
       return;
     }
-    void supabase
-      .from("customers")
-      .select("pending_coupe_offerte")
-      .eq("qr_token", qrToken)
-      .maybeSingle()
-      .then(
-        ({ data }) => {
-          setClientPendingCoupe(!!(data as { pending_coupe_offerte?: boolean } | null)?.pending_coupe_offerte);
-        },
-        () => setClientPendingCoupe(false)
-      );
+    // Vérifie si la dernière transaction du client est une coupe offerte achetée (points négatifs)
+    void (async () => {
+      const { data: customer, error: customerErr } = await supabase
+        .from("customers")
+        .select("id")
+        .eq("qr_token", qrToken)
+        .maybeSingle();
+
+      if (customerErr || !customer) {
+        setClientPendingCoupe(false);
+        return;
+      }
+
+      const { data: txs } = await supabase
+        .from("transactions")
+        .select("points")
+        .eq("customer_id", (customer as { id: number }).id)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      const last = (txs ?? [])[0] as { points: number | null } | undefined;
+      setClientPendingCoupe(!!last && (last.points ?? 0) < 0);
+    })();
   }, [token]);
 
   useEffect(() => {
