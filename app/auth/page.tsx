@@ -16,6 +16,7 @@ export default function AuthPage() {
   const [err, setErr] = useState("");
   const [info, setInfo] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isResetMode, setIsResetMode] = useState(false);
 
   const handleAuth = async () => {
     setLoading(true);
@@ -81,12 +82,22 @@ export default function AuthPage() {
       }}>
 
         {/* Title */}
-        <h1 style={{ fontSize: "22px", fontWeight: 600, textAlign: "center", color: "#111", marginBottom: "28px" }}>
-          {isLogin ? "Vous avez déjà utilisé chriscut ?" : "Nouveau chez chriscut ?"}
+        <h1 style={{ fontSize: "22px", fontWeight: 600, textAlign: "center", color: "#111", marginBottom: "12px" }}>
+          {isResetMode
+            ? "Réinitialiser votre mot de passe"
+            : isLogin
+              ? "Vous avez déjà utilisé chriscut ?"
+              : "Nouveau chez chriscut ?"}
         </h1>
 
+        {isResetMode && (
+          <p style={{ fontSize: "13px", color: "#555", textAlign: "center", marginBottom: "24px" }}>
+            Entrez l'adresse email associée à votre compte pour recevoir un lien de réinitialisation.
+          </p>
+        )}
+
         {/* Full name (signup only) */}
-        {!isLogin && (
+        {!isResetMode && !isLogin && (
           <div style={{ marginBottom: "16px" }}>
             <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#222", marginBottom: "6px" }}>
               Nom complet *
@@ -114,48 +125,50 @@ export default function AuthPage() {
           />
         </div>
 
-        {/* Password */}
-        <div style={{ marginBottom: "8px" }}>
-          <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#222", marginBottom: "6px" }}>
-            Mot de passe *
-          </label>
-          <div style={{ position: "relative" }}>
-            <input
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Mot de passe"
-              style={{ ...inputStyle, paddingRight: "48px" }}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              style={{
-                position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)",
-                background: "none", border: "none", cursor: "pointer", color: "#999", padding: 0,
-                display: "flex", alignItems: "center",
-              }}
-            >
-              {showPassword ? (
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.477 0-8.268-2.943-9.542-7a9.956 9.956 0 012.293-3.95M6.634 6.634A9.956 9.956 0 0112 5c4.477 0 8.268 2.943 9.542 7a9.97 9.97 0 01-4.176 5.166M3 3l18 18" />
-                </svg>
-              )}
-            </button>
+        {/* Password (hidden in reset mode) */}
+        {!isResetMode && (
+          <div style={{ marginBottom: "8px" }}>
+            <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#222", marginBottom: "6px" }}>
+              Mot de passe *
+            </label>
+            <div style={{ position: "relative" }}>
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Mot de passe"
+                style={{ ...inputStyle, paddingRight: "48px" }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)",
+                  background: "none", border: "none", cursor: "pointer", color: "#999", padding: 0,
+                  display: "flex", alignItems: "center",
+                }}
+              >
+                {showPassword ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.477 0-8.268-2.943-9.542-7a9.956 9.956 0 012.293-3.95M6.634 6.634A9.956 9.956 0 0112 5c4.477 0 8.268 2.943 9.542 7a9.97 9.97 0 01-4.176 5.166M3 3l18 18" />
+                  </svg>
+                )}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Forgot password */}
-        {isLogin && (
+        {/* Forgot password / back to login */}
+        {isLogin && !isResetMode && (
           <div style={{ marginBottom: "24px" }}>
             <button
               type="button"
-              onClick={handleForgotPassword}
+              onClick={() => { setIsResetMode(true); setErr(""); setInfo(""); }}
               style={{
                 background: "none", border: "none", padding: 0, cursor: "pointer",
                 fontSize: "13px", color: "#333", textDecoration: "underline",
@@ -163,6 +176,21 @@ export default function AuthPage() {
               }}
             >
               Mot de passe oublié ?
+            </button>
+          </div>
+        )}
+        {isResetMode && (
+          <div style={{ marginBottom: "16px", textAlign: "center" }}>
+            <button
+              type="button"
+              onClick={() => { setIsResetMode(false); setErr(""); setInfo(""); }}
+              style={{
+                background: "none", border: "none", padding: 0, cursor: "pointer",
+                fontSize: "13px", color: "#555", textDecoration: "underline",
+                textUnderlineOffset: "2px",
+              }}
+            >
+              Retour à la connexion
             </button>
           </div>
         )}
@@ -181,7 +209,7 @@ export default function AuthPage() {
 
         {/* Submit */}
         <button
-          onClick={handleAuth}
+          onClick={isResetMode ? handleForgotPassword : handleAuth}
           disabled={loading}
           style={{
             width: "100%", backgroundColor: "#111", color: "#fff",
@@ -192,34 +220,44 @@ export default function AuthPage() {
           onMouseEnter={e => { if (!loading) (e.target as HTMLButtonElement).style.backgroundColor = "#333"; }}
           onMouseLeave={e => { (e.target as HTMLButtonElement).style.backgroundColor = "#111"; }}
         >
-          {loading ? "Chargement..." : isLogin ? "Se connecter" : "Créer mon compte"}
+          {loading
+            ? "Chargement..."
+            : isResetMode
+              ? "Envoyer le lien de réinitialisation"
+              : isLogin
+                ? "Se connecter"
+                : "Créer mon compte"}
         </button>
 
-        {/* Divider */}
-        <div style={{ display: "flex", alignItems: "center", margin: "24px 0" }}>
-          <div style={{ flex: 1, height: "1px", backgroundColor: "#e5e7eb" }} />
-          <span style={{ margin: "0 14px", fontSize: "11px", color: "#aaa", letterSpacing: "0.1em", textTransform: "uppercase" }}>ou</span>
-          <div style={{ flex: 1, height: "1px", backgroundColor: "#e5e7eb" }} />
-        </div>
+        {!isResetMode && (
+          <>
+            {/* Divider */}
+            <div style={{ display: "flex", alignItems: "center", margin: "24px 0" }}>
+              <div style={{ flex: 1, height: "1px", backgroundColor: "#e5e7eb" }} />
+              <span style={{ margin: "0 14px", fontSize: "11px", color: "#aaa", letterSpacing: "0.1em", textTransform: "uppercase" }}>ou</span>
+              <div style={{ flex: 1, height: "1px", backgroundColor: "#e5e7eb" }} />
+            </div>
 
-        {/* Switch section */}
-        <h2 style={{ fontSize: "20px", fontWeight: 600, textAlign: "center", color: "#111", marginBottom: "16px" }}>
-          {isLogin ? "Nouveau chez chriscut?" : "Vous avez déjà un compte ?"}
-        </h2>
+            {/* Switch section */}
+            <h2 style={{ fontSize: "20px", fontWeight: 600, textAlign: "center", color: "#111", marginBottom: "16px" }}>
+              {isLogin ? "Nouveau chez chriscut?" : "Vous avez déjà un compte ?"}
+            </h2>
 
-        <button
-          type="button"
-          onClick={() => { setIsLogin(!isLogin); setErr(""); }}
-          style={{
-            width: "100%", backgroundColor: "#fff", color: "#111",
-            padding: "14px", borderRadius: "10px", border: "1px solid #d1d5db",
-            fontSize: "15px", fontWeight: 500, cursor: "pointer", transition: "background 0.15s",
-          }}
-          onMouseEnter={e => { (e.target as HTMLButtonElement).style.backgroundColor = "#f9fafb"; }}
-          onMouseLeave={e => { (e.target as HTMLButtonElement).style.backgroundColor = "#fff"; }}
-        >
-          {isLogin ? "Créer mon compte" : "Se connecter"}
-        </button>
+            <button
+              type="button"
+              onClick={() => { setIsLogin(!isLogin); setErr(""); }}
+              style={{
+                width: "100%", backgroundColor: "#fff", color: "#111",
+                padding: "14px", borderRadius: "10px", border: "1px solid #d1d5db",
+                fontSize: "15px", fontWeight: 500, cursor: "pointer", transition: "background 0.15s",
+              }}
+              onMouseEnter={e => { (e.target as HTMLButtonElement).style.backgroundColor = "#f9fafb"; }}
+              onMouseLeave={e => { (e.target as HTMLButtonElement).style.backgroundColor = "#fff"; }}
+            >
+              {isLogin ? "Créer mon compte" : "Se connecter"}
+            </button>
+          </>
+        )}
 
       </div>
     </div>
