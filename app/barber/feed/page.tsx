@@ -13,10 +13,15 @@ type FeedPost = {
 };
 
 const BUCKET = "feed-media";
+const FEED_EMOJIS = ["👍", "❤️", "😂", "😮", "😢"];
 
 export default function BarberFeedPage() {
   const router = useRouter();
   const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [reactionsByPost, setReactionsByPost] = useState<
+    Record<number, { counts: Record<string, number>; myEmoji: string | null }>
+  >({});
+  const [userId, setUserId] = useState<string | null>(null);
   const [content, setContent] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -27,9 +32,11 @@ export default function BarberFeedPage() {
   const [error, setError] = useState<string | null>(null);
 
   const loadPosts = async () => {
+    const fiftyDaysAgo = new Date(Date.now() - 50 * 24 * 60 * 60 * 1000).toISOString();
     const { data, error: err } = await supabase
       .from("feed_posts")
       .select("id, content, image_url, audio_url, created_at")
+      .gte("created_at", fiftyDaysAgo)
       .order("created_at", { ascending: false })
       .limit(50);
 
@@ -38,7 +45,30 @@ export default function BarberFeedPage() {
       setPosts([]);
       return;
     }
-    setPosts((data as FeedPost[]) ?? []);
+    const postList = (data as FeedPost[]) ?? [];
+    setPosts(postList);
+
+    if (postList.length > 0) {
+      const { data: authData } = await supabase.auth.getUser();
+      const uid = authData.user?.id;
+      const postIds = postList.map((p) => p.id);
+      const { data: reactions } = await supabase
+        .from("feed_post_reactions")
+        .select("post_id, emoji, created_by")
+        .in("post_id", postIds);
+      const byPost: Record<number, { counts: Record<string, number>; myEmoji: string | null }> = {};
+      postList.forEach((p) => {
+        byPost[p.id] = { counts: {}, myEmoji: null };
+      });
+      (reactions ?? []).forEach((r: { post_id: number; emoji: string; created_by: string }) => {
+        if (!byPost[r.post_id]) return;
+        byPost[r.post_id].counts[r.emoji] = (byPost[r.post_id].counts[r.emoji] ?? 0) + 1;
+        if (uid && r.created_by === uid) byPost[r.post_id].myEmoji = r.emoji;
+      });
+      setReactionsByPost(byPost);
+    } else {
+      setReactionsByPost({});
+    }
   };
 
   useEffect(() => {
@@ -48,6 +78,7 @@ export default function BarberFeedPage() {
         router.push("/auth");
         return;
       }
+      setUserId(authData.user.id);
       const { data: profile } = await supabase
         .from("profiles")
         .select("role")
@@ -62,6 +93,34 @@ export default function BarberFeedPage() {
     };
     run();
   }, [router]);
+
+  const setReaction = async (postId: number, emoji: string) => {
+    if (!userId) return;
+    const current = reactionsByPost[postId]?.myEmoji;
+    if (current === emoji) {
+      await supabase
+        .from("feed_post_reactions")
+        .delete()
+        .eq("post_id", postId)
+        .eq("created_by", userId);
+    } else {
+      await supabase.from("feed_post_reactions").upsert(
+        { post_id: postId, created_by: userId, emoji },
+        { onConflict: "post_id,created_by" }
+      );
+    }
+    const { data: list } = await supabase
+      .from("feed_post_reactions")
+      .select("post_id, emoji, created_by")
+      .eq("post_id", postId);
+    const counts: Record<string, number> = {};
+    let myEmoji: string | null = null;
+    (list ?? []).forEach((r: { emoji: string; created_by: string }) => {
+      counts[r.emoji] = (counts[r.emoji] ?? 0) + 1;
+      if (r.created_by === userId) myEmoji = r.emoji;
+    });
+    setReactionsByPost((prev) => ({ ...prev, [postId]: { counts, myEmoji } }));
+  };
 
   const handlePost = async () => {
     const text = content.trim();
@@ -335,6 +394,43 @@ export default function BarberFeedPage() {
                     style={{ width: "100%", marginTop: "6px", height: 36 }}
                   />
                 )}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    marginTop: "8px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {FEED_EMOJIS.map((emoji) => {
+                    const count = reactionsByPost[p.id]?.counts[emoji] ?? 0;
+                    const isMine = reactionsByPost[p.id]?.myEmoji === emoji;
+                    return (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => setReaction(p.id, emoji)}
+                        style={{
+                          padding: "4px 8px",
+                          borderRadius: "8px",
+                          border: isMine ? "1px solid #111" : "1px solid #e5e7eb",
+                          background: isMine ? "#f3f4f6" : "transparent",
+                          fontSize: "16px",
+                          cursor: "pointer",
+                        }}
+                        title="Réagir"
+                      >
+                        {emoji}
+                        {count > 0 && (
+                          <span style={{ marginLeft: "4px", fontSize: "12px", color: "#6b7280" }}>
+                            {count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
                 <div
                   style={{
                     display: "flex",

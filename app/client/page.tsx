@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 
+const FEED_EMOJIS = ["👍", "❤️", "😂", "😮", "😢"];
+
 export default function ClientHomePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -18,6 +20,9 @@ export default function ClientHomePage() {
   const [feedPosts, setFeedPosts] = useState<
     { id: number; content: string; image_url: string | null; audio_url: string | null; created_at: string }[]
   >([]);
+  const [reactionsByPost, setReactionsByPost] = useState<
+    Record<number, { counts: Record<string, number>; myEmoji: string | null }>
+  >({});
 
   useEffect(() => {
     const run = async () => {
@@ -93,12 +98,35 @@ export default function ClientHomePage() {
 
       setRecentVisits((lastTxs as any) ?? []);
 
+      const fiftyDaysAgo = new Date(Date.now() - 50 * 24 * 60 * 60 * 1000).toISOString();
       const { data: posts } = await supabase
         .from("feed_posts")
         .select("id, content, image_url, audio_url, created_at")
+        .gte("created_at", fiftyDaysAgo)
         .order("created_at", { ascending: false })
         .limit(20);
-      setFeedPosts((posts as { id: number; content: string; image_url: string | null; audio_url: string | null; created_at: string }[]) ?? []);
+      const postList = (posts as { id: number; content: string; image_url: string | null; audio_url: string | null; created_at: string }[]) ?? [];
+      setFeedPosts(postList);
+
+      if (postList.length > 0 && user) {
+        const postIds = postList.map((p) => p.id);
+        const { data: reactions } = await supabase
+          .from("feed_post_reactions")
+          .select("post_id, emoji, created_by")
+          .in("post_id", postIds);
+        const byPost: Record<number, { counts: Record<string, number>; myEmoji: string | null }> = {};
+        postList.forEach((p) => {
+          byPost[p.id] = { counts: {}, myEmoji: null };
+        });
+        (reactions ?? []).forEach((r: { post_id: number; emoji: string; created_by: string }) => {
+          if (!byPost[r.post_id]) return;
+          byPost[r.post_id].counts[r.emoji] = (byPost[r.post_id].counts[r.emoji] ?? 0) + 1;
+          if (r.created_by === user.id) byPost[r.post_id].myEmoji = r.emoji;
+        });
+        setReactionsByPost(byPost);
+      } else {
+        setReactionsByPost({});
+      }
 
       setLoading(false);
     };
@@ -161,6 +189,37 @@ export default function ClientHomePage() {
     color: "#111",
     cursor: "pointer",
     textDecoration: "underline",
+  };
+
+  const setReaction = async (postId: number, emoji: string) => {
+    if (!userId) return;
+    const current = reactionsByPost[postId]?.myEmoji;
+    if (current === emoji) {
+      await supabase
+        .from("feed_post_reactions")
+        .delete()
+        .eq("post_id", postId)
+        .eq("created_by", userId);
+    } else {
+      await supabase.from("feed_post_reactions").upsert(
+        { post_id: postId, created_by: userId, emoji },
+        { onConflict: "post_id,created_by" }
+      );
+    }
+    const { data: list } = await supabase
+      .from("feed_post_reactions")
+      .select("post_id, emoji, created_by")
+      .eq("post_id", postId);
+    const counts: Record<string, number> = {};
+    let myEmoji: string | null = null;
+    (list ?? []).forEach((r: { emoji: string; created_by: string }) => {
+      counts[r.emoji] = (counts[r.emoji] ?? 0) + 1;
+      if (r.created_by === userId) myEmoji = r.emoji;
+    });
+    setReactionsByPost((prev) => ({
+      ...prev,
+      [postId]: { counts, myEmoji },
+    }));
   };
 
   const handleAvatarChange = async (
@@ -398,6 +457,43 @@ export default function ClientHomePage() {
                       style={{ width: "100%", marginTop: "6px", height: 36 }}
                     />
                   )}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      marginTop: "8px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    {FEED_EMOJIS.map((emoji) => {
+                      const count = reactionsByPost[p.id]?.counts[emoji] ?? 0;
+                      const isMine = reactionsByPost[p.id]?.myEmoji === emoji;
+                      return (
+                        <button
+                          key={emoji}
+                          type="button"
+                          onClick={() => setReaction(p.id, emoji)}
+                          style={{
+                            padding: "4px 8px",
+                            borderRadius: "8px",
+                            border: isMine ? "1px solid #111" : "1px solid #e5e7eb",
+                            background: isMine ? "#f3f4f6" : "transparent",
+                            fontSize: "16px",
+                            cursor: "pointer",
+                          }}
+                          title="Réagir"
+                        >
+                          {emoji}
+                          {count > 0 && (
+                            <span style={{ marginLeft: "4px", fontSize: "12px", color: "#6b7280" }}>
+                              {count}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                   <span
                     style={{
                       fontSize: "12px",
