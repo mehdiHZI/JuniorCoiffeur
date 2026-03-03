@@ -75,3 +75,24 @@ body {
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.6), transparent);
 }
+
+/* Html5-qrcode (page barber) */
+.html5-qrcode-element {
+  font-size: 14px !important;
+}
+
+.html5-qrcode-element button {
+  font-size: 14px !important;
+  padding: 8px 14px !important;
+  border-radius: 9999px !important;
+}
+
+.html5-qrcode-element select {
+  font-size: 14px !important;
+  padding: 6px 10px !important;
+  border-radius: 8px !important;
+}
+
+.html5-qrcode-element span {
+  font-size: 14px !important;
+}
