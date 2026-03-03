@@ -13,38 +13,17 @@ export default function AuthPage() {
   const [fullName, setFullName] = useState("");
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
 
   const handleAuth = async () => {
     setLoading(true);
-    setErrorMsg("");
 
     if (isLogin) {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) {
-        setErrorMsg(error.message);
-        setLoading(false);
-        return;
-      }
-
-      const user = data.user;
-      if (!user) {
-        setErrorMsg("Connexion échouée.");
-        setLoading(false);
-        return;
-      }
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-      if (profile?.role === "barber") router.push("/barber");
+      if (error) alert(error.message);
       else router.push("/client");
     } else {
       const { data, error } = await supabase.auth.signUp({
@@ -53,7 +32,7 @@ export default function AuthPage() {
       });
 
       if (error) {
-        setErrorMsg(error.message);
+        alert(error.message);
         setLoading(false);
         return;
       }
@@ -80,68 +59,71 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-md card-luxe gold-glow rounded-2xl p-6 sm:p-8">
-        <div className="text-center mb-6">
-          <div className="text-xs tracking-[0.35em] text-gold uppercase">
-            Junior Coiffeur
+    <div className="min-h-screen flex items-center justify-center bg-[#050607] px-4">
+      {/* fond platine */}
+      <div className="absolute inset-0 opacity-80 pointer-events-none">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.10),transparent_55%),radial-gradient(circle_at_70%_80%,rgba(255,255,255,0.08),transparent_60%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.10),rgba(255,255,255,0.02),rgba(255,255,255,0.06))]" />
+      </div>
+
+      <div className="relative w-full max-w-md">
+        {/* cadre platine */}
+        <div className="rounded-2xl p-[1px] bg-[linear-gradient(135deg,#f5f5f5,#bfc4c9,#7f858c,#e7eaee)] shadow-[0_25px_80px_rgba(0,0,0,0.65)]">
+          <div className="rounded-2xl bg-[#0b0d10]/90 backdrop-blur-xl px-7 py-8">
+            <div className="text-center mb-6">
+              <div className="tracking-[0.35em] text-[11px] text-[#cfd5dc]">
+                JUNIOR COIFFEUR
+              </div>
+              <h1 className="mt-2 text-3xl font-semibold text-white">
+                {isLogin ? "Connexion" : "Inscription"}
+              </h1>
+              <div className="mt-2 text-xs text-[#aab2bb]">
+                Sécurisé • QR fidélité • Expérience premium
+              </div>
+            </div>
+
+            {!isLogin && (
+              <input
+                type="text"
+                placeholder="Nom complet"
+                className="w-full rounded-lg border border-white/10 bg-white/5 text-white placeholder:text-white/40 px-4 py-3 mb-4 outline-none focus:border-white/25"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+              />
+            )}
+
+            <input
+              type="email"
+              placeholder="Email"
+              className="w-full rounded-lg border border-white/10 bg-white/5 text-white placeholder:text-white/40 px-4 py-3 mb-4 outline-none focus:border-white/25"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+
+            <input
+              type="password"
+              placeholder="Mot de passe"
+              className="w-full rounded-lg border border-white/10 bg-white/5 text-white placeholder:text-white/40 px-4 py-3 mb-6 outline-none focus:border-white/25"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+
+            <button
+              onClick={handleAuth}
+              disabled={loading}
+              className="w-full rounded-lg py-3 font-medium text-black bg-[linear-gradient(135deg,#f5f5f5,#c9ced4,#9aa2ab)] hover:brightness-110 transition disabled:opacity-60"
+            >
+              {loading ? "Chargement..." : isLogin ? "Se connecter" : "S'inscrire"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsLogin(!isLogin)}
+              className="w-full mt-4 rounded-lg py-3 font-medium text-[#e7eaee] border border-white/15 bg-white/5 hover:bg-white/10 transition"
+            >
+              {isLogin ? "Créer un compte" : "Déjà un compte ? Se connecter"}
+            </button>
           </div>
-          <h1 className="text-2xl font-semibold mt-2">
-            {isLogin ? "Connexion" : "Inscription"}
-          </h1>
-          <div className="hr-gold mt-5" />
-        </div>
-
-        {!isLogin && (
-          <input
-            type="text"
-            placeholder="Nom complet"
-            className="w-full p-3 mb-3 rounded-xl input-luxe"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-          />
-        )}
-
-        <input
-          type="email"
-          placeholder="Email"
-          className="w-full p-3 mb-3 rounded-xl input-luxe"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-
-        <input
-          type="password"
-          placeholder="Mot de passe"
-          className="w-full p-3 mb-4 rounded-xl input-luxe"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-
-        {errorMsg && (
-          <div className="mb-4 rounded-xl border border-red-500/25 bg-red-500/10 p-3 text-sm text-red-200">
-            {errorMsg}
-          </div>
-        )}
-
-        <button
-          onClick={handleAuth}
-          disabled={loading}
-          className="w-full py-3 rounded-xl btn-luxe transition"
-        >
-          {loading ? "Chargement..." : isLogin ? "Se connecter" : "S'inscrire"}
-        </button>
-
-        <button
-          type="button"
-          className="mt-4 w-full text-sm text-[rgba(245,245,245,0.75)] hover:text-white transition"
-          onClick={() => setIsLogin(!isLogin)}
-        >
-          {isLogin ? "Créer un compte" : "Déjà un compte ? Se connecter"}
-        </button>
-
-        <div className="mt-6 text-center text-xs text-[rgba(245,245,245,0.55)]">
-          Sécurisé • QR fidélité • Expérience premium
         </div>
       </div>
     </div>
