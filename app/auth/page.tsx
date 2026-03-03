@@ -14,11 +14,13 @@ export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  const [info, setInfo] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   const handleAuth = async () => {
     setLoading(true);
     setErr("");
+    setInfo("");
 
     if (isLogin) {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -38,6 +40,25 @@ export default function AuthPage() {
       router.push("/client");
     }
     setLoading(false);
+  };
+
+  const handleForgotPassword = async () => {
+    setErr("");
+    setInfo("");
+
+    if (!email) {
+      setErr("Veuillez saisir votre adresse email.");
+      return;
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+
+    if (error) {
+      setErr(error.message);
+      return;
+    }
+
+    setInfo("Un email de réinitialisation de mot de passe vous a été envoyé.");
   };
 
   return (
@@ -132,20 +153,29 @@ export default function AuthPage() {
         {/* Forgot password */}
         {isLogin && (
           <div style={{ marginBottom: "24px" }}>
-            <button type="button" style={{
-              background: "none", border: "none", padding: 0, cursor: "pointer",
-              fontSize: "13px", color: "#333", textDecoration: "underline",
-              textUnderlineOffset: "2px",
-            }}>
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              style={{
+                background: "none", border: "none", padding: 0, cursor: "pointer",
+                fontSize: "13px", color: "#333", textDecoration: "underline",
+                textUnderlineOffset: "2px",
+              }}
+            >
               Mot de passe oublié ?
             </button>
           </div>
         )}
 
-        {/* Error */}
+        {/* Messages */}
         {err && (
           <div style={{ marginBottom: "14px", fontSize: "13px", color: "#dc2626" }}>
             {err}
+          </div>
+        )}
+        {info && (
+          <div style={{ marginBottom: "14px", fontSize: "13px", color: "#16a34a" }}>
+            {info}
           </div>
         )}
 
