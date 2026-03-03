@@ -14,11 +14,12 @@ export default function BarberPage() {
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
 
   useEffect(() => {
-    if (!token.startsWith("FIDELITE:")) {
+    const t = token.trim();
+    if (!t.toUpperCase().startsWith("FIDELITE:")) {
       setClientPendingCoupe(false);
       return;
     }
-    const qrToken = token.replace("FIDELITE:", "").trim();
+    const qrToken = t.replace(/^FIDELITE:\s*/i, "").trim();
     if (!qrToken) {
       setClientPendingCoupe(false);
       return;
@@ -67,7 +68,7 @@ export default function BarberPage() {
 
     scanner.render(
       (decodedText) => {
-        setToken(decodedText);
+        setToken(String(decodedText || "").trim());
         setScanOn(false); // stop automatique après scan
       },
       () => {}

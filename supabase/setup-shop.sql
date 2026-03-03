@@ -1,5 +1,6 @@
 -- À exécuter dans Supabase : SQL Editor → New query → Coller → Run
 -- Permet les achats shop (déduction de points = transaction avec points négatifs).
+-- Requis aussi pour que le coiffeur voie la notification "coupe offerte" au scan du QR client.
 
 -- 1) Autoriser les points négatifs (sinon erreur "transactions_points_check")
 ALTER TABLE transactions
@@ -24,6 +25,22 @@ WITH CHECK (user_id = auth.uid());
 DROP POLICY IF EXISTS "Barbers can clear pending_coupe_offerte" ON customers;
 CREATE POLICY "Barbers can clear pending_coupe_offerte"
 ON customers FOR UPDATE TO authenticated
+USING (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'barber')
+);
+
+-- 6) RLS : le coiffeur peut LIRE les clients (pour le scan QR et la détection coupe offerte)
+DROP POLICY IF EXISTS "Barbers can read customers for scan" ON customers;
+CREATE POLICY "Barbers can read customers for scan"
+ON customers FOR SELECT TO authenticated
+USING (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'barber')
+);
+
+-- 7) RLS : le coiffeur peut LIRE les transactions (pour détecter une coupe offerte en attente)
+DROP POLICY IF EXISTS "Barbers can read transactions" ON transactions;
+CREATE POLICY "Barbers can read transactions"
+ON transactions FOR SELECT TO authenticated
 USING (
   EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'barber')
 );
