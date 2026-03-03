@@ -13,11 +13,11 @@ export default function AuthPage() {
   const [fullName, setFullName] = useState("");
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
+  const [err, setErr] = useState("");
 
   const handleAuth = async () => {
     setLoading(true);
-    setErrorMsg("");
+    setErr("");
 
     if (isLogin) {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -26,14 +26,14 @@ export default function AuthPage() {
       });
 
       if (error) {
-        setErrorMsg(error.message);
+        setErr(error.message);
         setLoading(false);
         return;
       }
 
       const user = data.user;
       if (!user) {
-        setErrorMsg("Connexion échouée.");
+        setErr("Connexion échouée.");
         setLoading(false);
         return;
       }
@@ -53,13 +53,12 @@ export default function AuthPage() {
       });
 
       if (error) {
-        setErrorMsg(error.message);
+        setErr(error.message);
         setLoading(false);
         return;
       }
 
       const user = data.user;
-
       if (user) {
         await supabase.from("profiles").insert({
           id: user.id,
@@ -80,58 +79,55 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0c10] px-4 py-10 flex items-center justify-center">
-      <div className="w-full max-w-5xl rounded-2xl overflow-hidden border border-white/10 bg-[#0f131a] shadow-[0_30px_100px_rgba(0,0,0,0.6)]">
-        <div className="grid grid-cols-1 md:grid-cols-2">
-          {/* LEFT: branding */}
-          <div className="relative p-10 md:p-12 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.09),transparent_45%),radial-gradient(circle_at_80%_70%,rgba(255,255,255,0.06),transparent_55%)]">
-            <div className="text-xs tracking-[0.35em] uppercase text-white/70">
+    <div className="min-h-screen bg-[#0b0c10] text-white flex items-center justify-center px-4">
+      <div className="w-full max-w-4xl overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-[0_30px_120px_rgba(0,0,0,0.65)]">
+        <div className="grid md:grid-cols-2">
+          {/* Left: Brand panel */}
+          <div className="p-8 md:p-10 bg-[linear-gradient(135deg,rgba(255,255,255,0.10),rgba(255,255,255,0.02))]">
+            <div className="text-xs tracking-[0.35em] uppercase text-white/60">
               Junior Coiffeur
             </div>
 
-            <h1 className="mt-4 text-3xl md:text-4xl font-semibold text-white leading-tight">
-              Fidélité & actu
-              <br />
-              pour votre salon
+            <h1 className="mt-4 text-4xl font-semibold leading-tight">
+              Une expérience
+              <span className="block text-white/70">premium.</span>
             </h1>
 
-            <p className="mt-4 text-white/60 max-w-sm">
-              QR fidélité, annonces du salon, boutique et avantages. Tout au même
-              endroit, sur mobile.
+            <p className="mt-5 text-sm text-white/60 leading-relaxed">
+              Fidélité par QR, actualités, et boutique. Conçu pour être simple,
+              rapide, et élégant.
             </p>
 
-            <div className="mt-8 space-y-3 text-sm text-white/70">
-              <div className="flex items-center gap-2">
-                <span className="inline-block h-2 w-2 rounded-full bg-white/60" />
-                Scan QR instantané
+            <div className="mt-8 grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                <div className="text-xs text-white/60">Fidélité</div>
+                <div className="mt-1 text-sm">QR + points</div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-block h-2 w-2 rounded-full bg-white/60" />
-                Points & récompenses
+              <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                <div className="text-xs text-white/60">Actus</div>
+                <div className="mt-1 text-sm">Salon live</div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-block h-2 w-2 rounded-full bg-white/60" />
-                Actualités du salon
+              <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                <div className="text-xs text-white/60">Boutique</div>
+                <div className="mt-1 text-sm">Points & €</div>
               </div>
-            </div>
-
-            <div className="mt-10 text-xs text-white/40">
-              © {new Date().getFullYear()} Junior Coiffeur
+              <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                <div className="text-xs text-white/60">Support</div>
+                <div className="mt-1 text-sm">Inclus</div>
+              </div>
             </div>
           </div>
 
-          {/* RIGHT: form */}
-          <div className="p-8 md:p-12 bg-[#0c0f14]">
+          {/* Right: Form panel */}
+          <div className="p-8 md:p-10 bg-[#0b0c10]">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-white text-2xl font-semibold">
-                  {isLogin ? "Connexion" : "Inscription"}
+                <div className="text-xs tracking-[0.25em] uppercase text-white/50">
+                  Accès
                 </div>
-                <div className="text-white/50 text-sm mt-1">
-                  {isLogin
-                    ? "Accédez à votre espace."
-                    : "Créez un compte client en 30 secondes."}
-                </div>
+                <h2 className="mt-2 text-2xl font-semibold">
+                  {isLogin ? "Connexion" : "Créer un compte"}
+                </h2>
               </div>
 
               <button
@@ -139,59 +135,55 @@ export default function AuthPage() {
                 onClick={() => setIsLogin(!isLogin)}
                 className="text-sm text-white/70 hover:text-white transition"
               >
-                {isLogin ? "Créer un compte" : "J’ai déjà un compte"}
+                {isLogin ? "Inscription" : "Connexion"}
               </button>
             </div>
 
             <div className="mt-8 space-y-5">
               {!isLogin && (
                 <div>
-                  <label className="block text-sm text-white/60 mb-2">
-                    Nom complet
-                  </label>
+                  <label className="text-sm text-white/60">Nom complet</label>
                   <input
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    className="w-full rounded-xl px-4 py-3 bg-white/5 border border-white/10 text-white outline-none focus:border-white/25 transition"
-                    placeholder="Ex: Mehdi H."
+                    className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/30 outline-none focus:border-white/30 transition"
+                    placeholder="Ex: Mehdi"
                   />
                 </div>
               )}
 
               <div>
-                <label className="block text-sm text-white/60 mb-2">Email</label>
+                <label className="text-sm text-white/60">Email</label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full rounded-xl px-4 py-3 bg-white/5 border border-white/10 text-white outline-none focus:border-white/25 transition"
-                  placeholder="exemple@email.com"
+                  className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/30 outline-none focus:border-white/30 transition"
+                  placeholder="ex: mehdi@mail.com"
                 />
               </div>
 
               <div>
-                <label className="block text-sm text-white/60 mb-2">
-                  Mot de passe
-                </label>
+                <label className="text-sm text-white/60">Mot de passe</label>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-xl px-4 py-3 bg-white/5 border border-white/10 text-white outline-none focus:border-white/25 transition"
+                  className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/30 outline-none focus:border-white/30 transition"
                   placeholder="••••••••"
                 />
               </div>
 
-              {errorMsg && (
-                <div className="rounded-xl border border-red-500/25 bg-red-500/10 p-3 text-sm text-red-200">
-                  {errorMsg}
+              {err && (
+                <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                  {err}
                 </div>
               )}
 
               <button
                 onClick={handleAuth}
                 disabled={loading}
-                className="w-full rounded-xl py-3 font-medium bg-white text-black hover:bg-gray-200 transition disabled:opacity-60"
+                className="w-full rounded-xl bg-white text-black py-3 font-medium hover:bg-white/90 transition disabled:opacity-60"
               >
                 {loading
                   ? "Chargement..."
@@ -200,8 +192,8 @@ export default function AuthPage() {
                   : "Créer mon compte"}
               </button>
 
-              <div className="text-xs text-white/40">
-                En continuant, vous acceptez les conditions d’utilisation.
+              <div className="text-center text-xs text-white/40">
+                En continuant, tu acceptes les conditions d’utilisation.
               </div>
             </div>
           </div>
