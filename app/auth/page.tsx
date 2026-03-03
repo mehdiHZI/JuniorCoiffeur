@@ -111,22 +111,32 @@ export default function AuthPage() {
         )}
 
         {/* Email */}
-        <input
-          type="email"
-          placeholder="Email"
-          className="w-full p-3 mb-4 rounded-lg bg-[#1f242b] border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-white/30 transition"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+<div className="mb-6">
+  <label className="block text-sm text-gray-400 mb-2">
+    Email
+  </label>
+  <input
+    type="email"
+    placeholder="votre@email.com"
+    className="w-full p-3 rounded-lg bg-[#1f242b] border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-white/30 transition"
+    value={email}
+    onChange={(e) => setEmail(e.target.value)}
+  />
+</div>
 
-        {/* Mot de passe (avec plus d’espace) */}
-        <input
-          type="password"
-          placeholder="Mot de passe"
-          className="w-full p-3 mb-6 rounded-lg bg-[#1f242b] border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-white/30 transition"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+{/* Mot de passe */}
+<div className="mb-8">
+  <label className="block text-sm text-gray-400 mb-2">
+    Mot de passe
+  </label>
+  <input
+    type="password"
+    placeholder="••••••••"
+    className="w-full p-3 rounded-lg bg-[#1f242b] border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-white/30 transition"
+    value={password}
+    onChange={(e) => setPassword(e.target.value)}
+  />
+</div>
 
         {/* Bouton principal */}
         <button
