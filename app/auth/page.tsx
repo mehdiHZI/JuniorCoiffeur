@@ -78,100 +78,80 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[#0f1116] shadow-[0_30px_120px_rgba(0,0,0,0.8)]">
+    <div className="min-h-screen bg-[#f3f4f6] flex items-center justify-center px-4">
+      <div className="w-full max-w-md bg-white p-8 rounded-xl shadow-md">
         
-        {/* Header */}
-        <div className="border-b border-white/10 px-8 py-8 text-center">
-          <div className="text-sm tracking-widest text-white/60 uppercase">
-            Junior Coiffeur
-          </div>
+        <h1 className="text-2xl font-semibold text-center mb-8">
+          {isLogin ? "Vous avez déjà un compte ?" : "Créer un compte"}
+        </h1>
 
-          <h1 className="mt-4 text-3xl font-semibold">
-            {isLogin ? "Connexion" : "Inscription"}
-          </h1>
-
-          <p className="mt-3 text-sm text-white/50">
-            Sécurisé • QR fidélité • Expérience premium
-          </p>
-        </div>
-
-        {/* Form */}
-        <div className="px-8 py-8">
-          {!isLogin && (
-            <div className="mb-6">
-              <label className="block text-sm text-white/80 mb-2">
-                Nom complet
-              </label>
-              <input
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className="w-full rounded-lg border border-white/20 bg-black px-4 py-3 text-white outline-none focus:border-white transition"
-                placeholder="Ex: Mehdi"
-              />
-            </div>
-          )}
-
-          <div className="mb-6">
-            <label className="block text-sm text-white/80 mb-2">
-              Email
-            </label>
+        {!isLogin && (
+          <div className="mb-5">
+            <label className="block text-sm mb-2">Nom complet *</label>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-white/20 bg-black px-4 py-3 text-white outline-none focus:border-white transition"
-              placeholder="ex: mehdi@mail.com"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-black"
+              placeholder="Nom complet"
             />
           </div>
+        )}
 
-          <div className="mb-6">
-            <label className="block text-sm text-white/80 mb-2">
-              Mot de passe
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-white/20 bg-black px-4 py-3 text-white outline-none focus:border-white transition"
-              placeholder="••••••••"
-            />
-          </div>
-
-          {err && (
-            <div className="mb-6 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-white">
-              {err}
-            </div>
-          )}
-
-          <button
-            onClick={handleAuth}
-            disabled={loading}
-            className="w-full rounded-lg py-3 font-semibold bg-white text-black hover:bg-white/90 transition disabled:opacity-60"
-          >
-            {loading
-              ? "Chargement..."
-              : isLogin
-              ? "Se connecter"
-              : "Créer mon compte"}
-          </button>
-
-          <div className="my-6 h-px bg-white/10" />
-
-          <button
-            type="button"
-            onClick={() => setIsLogin(!isLogin)}
-            className="w-full rounded-lg py-3 font-semibold border border-white/20 hover:bg-white/10 transition"
-          >
-            {isLogin
-              ? "Créer un compte"
-              : "Déjà un compte ? Se connecter"}
-          </button>
-
-          <p className="mt-6 text-center text-xs text-white/40">
-            © {new Date().getFullYear()} Junior Coiffeur
-          </p>
+        <div className="mb-5">
+          <label className="block text-sm mb-2">Email *</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-black"
+            placeholder="Email"
+          />
         </div>
+
+        <div className="mb-3">
+          <label className="block text-sm mb-2">Mot de passe *</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-black"
+            placeholder="Mot de passe"
+          />
+        </div>
+
+        {err && (
+          <div className="mb-4 text-sm text-red-600">
+            {err}
+          </div>
+        )}
+
+        <button
+          onClick={handleAuth}
+          disabled={loading}
+          className="w-full bg-black text-white py-3 rounded-lg font-medium hover:bg-gray-900 transition disabled:opacity-60"
+        >
+          {loading
+            ? "Chargement..."
+            : isLogin
+            ? "Se connecter"
+            : "Créer mon compte"}
+        </button>
+
+        <div className="flex items-center my-6">
+          <div className="flex-1 h-px bg-gray-300" />
+          <span className="mx-3 text-sm text-gray-500">OU</span>
+          <div className="flex-1 h-px bg-gray-300" />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsLogin(!isLogin)}
+          className="w-full border border-gray-300 py-3 rounded-lg font-medium hover:bg-gray-100 transition"
+        >
+          {isLogin
+            ? "Créer mon compte"
+            : "Déjà un compte ? Se connecter"}
+        </button>
       </div>
     </div>
   );
