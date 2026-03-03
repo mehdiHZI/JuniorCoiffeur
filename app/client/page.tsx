@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 
@@ -9,6 +9,8 @@ export default function ClientHomePage() {
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
   const [points, setPoints] = useState<number>(0);
   const [recentVisits, setRecentVisits] = useState<
     { id: number; created_at: string; points: number | null }[]
@@ -94,6 +96,14 @@ export default function ClientHomePage() {
     run();
   }, [router]);
 
+  useEffect(() => {
+    return () => {
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+      }
+    };
+  }, []);
+
   const containerStyle: React.CSSProperties = {
     minHeight: "100vh",
     backgroundColor: "#f3f4f6",
@@ -149,7 +159,18 @@ export default function ClientHomePage() {
     const file = e.target.files?.[0];
     if (!file || !userId) return;
 
-    const ext = file.name.split(".").pop();
+    setUploadError(null);
+
+    // Aperçu immédiat depuis la galerie (la photo s’affiche tout de suite)
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+    const previewUrl = URL.createObjectURL(file);
+    objectUrlRef.current = previewUrl;
+    setAvatarUrl(previewUrl);
+
+    const ext = file.name.split(".").pop() || "jpg";
     const filePath = `${userId}/${Date.now()}.${ext}`;
 
     const { error: uploadErr } = await supabase.storage
@@ -157,7 +178,10 @@ export default function ClientHomePage() {
       .upload(filePath, file, { upsert: true });
 
     if (uploadErr) {
-      console.error(uploadErr.message);
+      setUploadError(
+        "Impossible d’enregistrer la photo. Vérifie dans Supabase : bucket « avatars » créé et autorisé en écriture pour les utilisateurs connectés."
+      );
+      console.error("Upload avatar:", uploadErr.message);
       return;
     }
 
@@ -165,12 +189,23 @@ export default function ClientHomePage() {
       data: { publicUrl },
     } = supabase.storage.from("avatars").getPublicUrl(filePath);
 
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
     setAvatarUrl(publicUrl);
 
-    await supabase
+    const { error: updateErr } = await supabase
       .from("profiles")
       .update({ avatar_url: publicUrl })
       .eq("id", userId);
+
+    if (updateErr) {
+      setUploadError(
+        "Photo envoyée mais profil non mis à jour. Vérifie que la colonne « avatar_url » existe dans la table profiles."
+      );
+      console.error("Update profile avatar_url:", updateErr.message);
+    }
   };
 
   if (loading) {
@@ -229,6 +264,19 @@ export default function ClientHomePage() {
               style={{ display: "none" }}
             />
           </label>
+          {uploadError && (
+            <p
+              style={{
+                marginTop: "8px",
+                fontSize: "12px",
+                color: "#dc2626",
+                textAlign: "center",
+                maxWidth: "320px",
+              }}
+            >
+              {uploadError}
+            </p>
+          )}
           <div
             style={{
               marginTop: "10px",
