@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
 
@@ -183,16 +184,35 @@ export default function BarberPage() {
   return (
     <div style={containerStyle}>
       <div style={cardStyle}>
-        <h1
+        <div
           style={{
-            fontSize: "22px",
-            fontWeight: 600,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
             marginBottom: "8px",
-            color: "#111",
           }}
         >
-          Mode coiffeur
-        </h1>
+          <h1
+            style={{
+              fontSize: "22px",
+              fontWeight: 600,
+              margin: 0,
+              color: "#111",
+            }}
+          >
+            Mode coiffeur
+          </h1>
+          <Link
+            href="/barber/feed"
+            style={{
+              fontSize: "14px",
+              color: "#6b7280",
+              textDecoration: "none",
+            }}
+          >
+            Actualités
+          </Link>
+        </div>
 
         <p style={{ fontSize: "14px", color: "#4b5563", marginBottom: "16px" }}>
           Scanne le QR code de ton client ou colle son contenu pour lui ajouter

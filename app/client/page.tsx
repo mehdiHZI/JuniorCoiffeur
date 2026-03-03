@@ -15,6 +15,9 @@ export default function ClientHomePage() {
   const [recentVisits, setRecentVisits] = useState<
     { id: number; created_at: string; points: number | null }[]
   >([]);
+  const [feedPosts, setFeedPosts] = useState<
+    { id: number; content: string; created_at: string }[]
+  >([]);
 
   useEffect(() => {
     const run = async () => {
@@ -89,6 +92,13 @@ export default function ClientHomePage() {
         .limit(3);
 
       setRecentVisits((lastTxs as any) ?? []);
+
+      const { data: posts } = await supabase
+        .from("feed_posts")
+        .select("id, content, created_at")
+        .order("created_at", { ascending: false })
+        .limit(20);
+      setFeedPosts((posts as { id: number; content: string; created_at: string }[]) ?? []);
 
       setLoading(false);
     };
@@ -322,6 +332,64 @@ export default function ClientHomePage() {
                     year: "2-digit",
                   })}{" "}
                   – {v.points ?? 0} points
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div style={{ marginTop: "24px" }}>
+          <h2
+            style={{
+              fontSize: "16px",
+              fontWeight: 600,
+              marginBottom: "10px",
+              color: "#111",
+            }}
+          >
+            Actualités
+          </h2>
+          {feedPosts.length === 0 ? (
+            <p style={{ fontSize: "13px", color: "#6b7280" }}>
+              Aucune actualité pour l&apos;instant.
+            </p>
+          ) : (
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              {feedPosts.map((p) => (
+                <li
+                  key={p.id}
+                  style={{
+                    padding: "12px 0",
+                    borderBottom: "1px solid #e5e7eb",
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: "14px",
+                      color: "#111",
+                      margin: 0,
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {p.content}
+                  </p>
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      color: "#9ca3af",
+                      marginTop: "4px",
+                      display: "block",
+                    }}
+                  >
+                    {new Date(p.created_at).toLocaleString("fr-FR", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
                 </li>
               ))}
             </ul>
