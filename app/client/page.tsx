@@ -471,11 +471,14 @@ export default function ClientHomePage() {
                   }}
                 >
                   <span style={{ fontSize: "14px", color: "#111" }}>
-                    {new Date(b.slot_date + "Z").toLocaleDateString("fr-FR", {
-                      weekday: "short",
-                      day: "2-digit",
-                      month: "short",
-                    })}{" "}
+                    {(() => {
+                      const [y, m, d] = b.slot_date.split("-").map(Number);
+                      return new Date(y, m - 1, d).toLocaleDateString("fr-FR", {
+                        weekday: "short",
+                        day: "2-digit",
+                        month: "short",
+                      });
+                    })()}{" "}
                     {String(b.start_time).slice(0, 5)} – {String(b.end_time).slice(0, 5)}
                   </span>
                   <button

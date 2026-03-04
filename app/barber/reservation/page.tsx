@@ -224,7 +224,10 @@ export default function BarberReservationPage() {
                 }}
               >
                 <span style={{ fontSize: "14px", color: "#111" }}>
-                  {new Date(s.slot_date + "Z").toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "short" })}{" "}
+                  {(() => {
+                    const [y, m, d] = s.slot_date.split("-").map(Number);
+                    return new Date(y, m - 1, d).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "short" });
+                  })()}{" "}
                   {String(s.start_time).slice(0, 5)} – {String(s.end_time).slice(0, 5)}
                 </span>
                 <button

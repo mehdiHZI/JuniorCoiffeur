@@ -208,7 +208,10 @@ export default function ClientReservationPage() {
         {selectedDate && (
           <div style={{ marginTop: "20px", paddingTop: "16px", borderTop: "1px solid #e5e7eb" }}>
             <h2 style={{ fontSize: "16px", fontWeight: 600, marginBottom: "10px", color: "#111" }}>
-              Créneaux le {new Date(selectedDate + "Z").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
+              Créneaux le {(() => {
+              const [y, m, d] = selectedDate.split("-").map(Number);
+              return new Date(y, m - 1, d).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+            })()}
             </h2>
             {loadingSlots ? (
               <p style={{ fontSize: "14px", color: "#6b7280" }}>Chargement...</p>
