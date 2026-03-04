@@ -65,7 +65,7 @@ export default function AuthPage() {
   return (
     <div style={{
       minHeight: "100vh",
-      backgroundColor: "#050608",
+      backgroundColor: "transparent",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",

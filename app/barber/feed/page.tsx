@@ -197,7 +197,7 @@ export default function BarberFeedPage() {
 
   const containerStyle: React.CSSProperties = {
     minHeight: "100vh",
-    backgroundColor: "#050608",
+    backgroundColor: "transparent",
     padding: "24px 16px",
     paddingTop: "60px",
     fontFamily: "'Helvetica Neue', Arial, sans-serif",

@@ -52,7 +52,7 @@ export default function ClientHistoriquePage() {
 
   const containerStyle: React.CSSProperties = {
     minHeight: "100vh",
-    backgroundColor: "#050608",
+    backgroundColor: "transparent",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
