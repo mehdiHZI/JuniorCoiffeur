@@ -61,7 +61,7 @@ export default function RootLayout({
           <img
             src="/chriscut-logo.png"
             alt="Logo Chriscut"
-            style={{ height: "32px" }}
+            style={{ height: "44px" }}
           />
         </div>
         {children}

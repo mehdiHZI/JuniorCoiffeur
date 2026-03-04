@@ -81,12 +81,12 @@ export default function AuthPage() {
         boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
       }}>
 
-        <div style={{ textAlign: "center", marginBottom: "20px" }}>
+        <div style={{ textAlign: "center", marginBottom: "24px" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/chriscut-logo.png"
             alt="Logo Chriscut"
-            style={{ height: "64px", objectFit: "contain" }}
+            style={{ height: "90px", objectFit: "contain" }}
           />
         </div>
 
