@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -12,6 +12,19 @@ export default function ClientLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+
+  useEffect(() => {
+    const check = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.replace("/auth");
+        return;
+      }
+      setAuthReady(true);
+    };
+    check();
+  }, [router]);
 
   const isActive = (path: string) => pathname === path;
 
@@ -55,6 +68,14 @@ export default function ClientLayout({
     backgroundColor: "#f3f4f6",
     fontWeight: 600,
   };
+
+  if (!authReady) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#f3f4f6", fontFamily: "'Helvetica Neue', Arial, sans-serif" }}>
+        Chargement...
+      </div>
+    );
+  }
 
   return (
     <div style={{ position: "relative", minHeight: "100vh" }}>
