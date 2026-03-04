@@ -25,6 +25,9 @@ export default function ClientHomePage() {
     Record<number, { counts: Record<string, number>; myEmoji: string | null }>
   >({});
   const [pointsNotification, setPointsNotification] = useState<string | null>(null);
+  const [bookings, setBookings] = useState<
+    { id: number; slot_id: number; slot_date: string; start_time: string; end_time: string }[]
+  >([]);
 
   useEffect(() => {
     const run = async () => {
@@ -130,6 +133,26 @@ export default function ClientHomePage() {
       } else {
         setReactionsByPost({});
       }
+
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: bookingsData } = await supabase
+        .from("bookings")
+        .select("id, slot_id, availability_slots(slot_date, start_time, end_time)")
+        .eq("customer_id", customer.id);
+      const withSlots = (bookingsData ?? []).map((b: { id: number; slot_id: number; availability_slots: { slot_date: string; start_time: string; end_time: string } | { slot_date: string; start_time: string; end_time: string }[] | null }) => {
+        const raw = b.availability_slots;
+        const slot = Array.isArray(raw) ? raw[0] : raw;
+        if (!slot) return null;
+        return {
+          id: b.id,
+          slot_id: b.slot_id,
+          slot_date: slot.slot_date,
+          start_time: slot.start_time,
+          end_time: slot.end_time,
+        };
+      }).filter(Boolean) as { id: number; slot_id: number; slot_date: string; start_time: string; end_time: string }[];
+      const upcoming = withSlots.filter((b) => b.slot_date >= today).sort((a, b) => a.slot_date.localeCompare(b.slot_date) || String(a.start_time).localeCompare(String(b.start_time)));
+      setBookings(upcoming);
 
       setLoading(false);
     };
@@ -268,6 +291,11 @@ export default function ClientHomePage() {
       ...prev,
       [postId]: { counts, myEmoji },
     }));
+  };
+
+  const cancelBooking = async (bookingId: number) => {
+    const { error } = await supabase.from("bookings").delete().eq("id", bookingId);
+    if (!error) setBookings((prev) => prev.filter((b) => b.id !== bookingId));
   };
 
   const handleAvatarChange = async (
@@ -418,7 +446,59 @@ export default function ClientHomePage() {
           )}
         </div>
 
-        <div>
+        {bookings.length > 0 && (
+          <div style={{ marginTop: "20px" }}>
+            <h2
+              style={{
+                fontSize: "16px",
+                fontWeight: 600,
+                marginBottom: "8px",
+                color: "#111",
+              }}
+            >
+              Prochain(s) rendez-vous
+            </h2>
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              {bookings.map((b) => (
+                <li
+                  key={b.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "10px 0",
+                    borderBottom: "1px solid #e5e7eb",
+                  }}
+                >
+                  <span style={{ fontSize: "14px", color: "#111" }}>
+                    {new Date(b.slot_date + "Z").toLocaleDateString("fr-FR", {
+                      weekday: "short",
+                      day: "2-digit",
+                      month: "short",
+                    })}{" "}
+                    {String(b.start_time).slice(0, 5)} – {String(b.end_time).slice(0, 5)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => cancelBooking(b.id)}
+                    style={{
+                      fontSize: "12px",
+                      color: "#dc2626",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      textDecoration: "underline",
+                    }}
+                  >
+                    Annuler
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div style={{ marginTop: "20px" }}>
           <h2
             style={{
               fontSize: "16px",

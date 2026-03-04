@@ -1,0 +1,244 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
+
+type Slot = {
+  id: number;
+  slot_date: string;
+  start_time: string;
+  end_time: string;
+  created_at: string;
+};
+
+export default function BarberReservationPage() {
+  const router = useRouter();
+  const [slots, setSlots] = useState<Slot[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [slotDate, setSlotDate] = useState("");
+  const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("10:00");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadSlots = async () => {
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) return;
+    const { data, error: err } = await supabase
+      .from("availability_slots")
+      .select("id, slot_date, start_time, end_time, created_at")
+      .eq("created_by", authData.user.id)
+      .gte("slot_date", new Date().toISOString().slice(0, 10))
+      .order("slot_date", { ascending: true })
+      .order("start_time", { ascending: true });
+    if (err) {
+      setError(err.message);
+      setSlots([]);
+      return;
+    }
+    setSlots((data as Slot[]) ?? []);
+  };
+
+  useEffect(() => {
+    const run = async () => {
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData.user) {
+        router.push("/auth");
+        return;
+      }
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", authData.user.id)
+        .maybeSingle();
+      if ((profile as { role?: string } | null)?.role !== "barber") {
+        router.push("/barber");
+        return;
+      }
+      await loadSlots();
+      setLoading(false);
+    };
+    run();
+  }, [router]);
+
+  const handleAdd = async () => {
+    if (!slotDate || !startTime || !endTime) {
+      setError("Renseigne la date et les heures.");
+      return;
+    }
+    if (startTime >= endTime) {
+      setError("L'heure de fin doit être après l'heure de début.");
+      return;
+    }
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) return;
+    setSaving(true);
+    setError(null);
+    const { error: err } = await supabase.from("availability_slots").insert({
+      slot_date: slotDate,
+      start_time: startTime,
+      end_time: endTime,
+      created_by: authData.user.id,
+    });
+    if (err) {
+      setError(err.message);
+      setSaving(false);
+      return;
+    }
+    setSlotDate("");
+    setStartTime("09:00");
+    setEndTime("10:00");
+    await loadSlots();
+    setSaving(false);
+  };
+
+  const handleDelete = async (id: number) => {
+    const { data: booked } = await supabase.from("bookings").select("id").eq("slot_id", id).maybeSingle();
+    if (booked) {
+      setError("Ce créneau est déjà réservé, impossible de le supprimer.");
+      return;
+    }
+    const { error: err } = await supabase.from("availability_slots").delete().eq("id", id);
+    if (!err) setSlots((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const containerStyle: React.CSSProperties = {
+    minHeight: "100vh",
+    backgroundColor: "#f3f4f6",
+    padding: "24px 16px",
+    paddingTop: "60px",
+    fontFamily: "'Helvetica Neue', Arial, sans-serif",
+  };
+
+  const cardStyle: React.CSSProperties = {
+    maxWidth: "480px",
+    margin: "0 auto",
+    backgroundColor: "#ffffff",
+    padding: "28px 24px",
+    borderRadius: "16px",
+    boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+  };
+
+  if (loading) {
+    return (
+      <div style={containerStyle}>
+        <div style={cardStyle}>Chargement...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={containerStyle}>
+      <div style={cardStyle}>
+        <h1 style={{ fontSize: "22px", fontWeight: 600, marginBottom: "8px", color: "#111" }}>
+          Réservation
+        </h1>
+        <p style={{ fontSize: "14px", color: "#4b5563", marginBottom: "20px" }}>
+          Ajoute des créneaux. Les clients pourront les réserver.
+        </p>
+
+        <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "4px", color: "#374151" }}>Date</label>
+        <input
+          type="date"
+          value={slotDate}
+          min={new Date().toISOString().slice(0, 10)}
+          onChange={(e) => setSlotDate(e.target.value)}
+          style={{
+            width: "100%",
+            boxSizing: "border-box",
+            padding: "10px 12px",
+            borderRadius: "10px",
+            border: "1px solid #d1d5db",
+            marginBottom: "12px",
+            fontSize: "14px",
+          }}
+        />
+        <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "4px", color: "#374151" }}>Heure début</label>
+        <input
+          type="time"
+          value={startTime}
+          onChange={(e) => setStartTime(e.target.value)}
+          style={{
+            width: "100%",
+            boxSizing: "border-box",
+            padding: "10px 12px",
+            borderRadius: "10px",
+            border: "1px solid #d1d5db",
+            marginBottom: "12px",
+            fontSize: "14px",
+          }}
+        />
+        <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "4px", color: "#374151" }}>Heure fin</label>
+        <input
+          type="time"
+          value={endTime}
+          onChange={(e) => setEndTime(e.target.value)}
+          style={{
+            width: "100%",
+            boxSizing: "border-box",
+            padding: "10px 12px",
+            borderRadius: "10px",
+            border: "1px solid #d1d5db",
+            marginBottom: "16px",
+            fontSize: "14px",
+          }}
+        />
+        <button
+          type="button"
+          onClick={handleAdd}
+          disabled={saving}
+          style={{
+            width: "100%",
+            backgroundColor: "#111",
+            color: "#fff",
+            padding: "12px",
+            borderRadius: "10px",
+            border: "none",
+            fontSize: "15px",
+            fontWeight: 500,
+            cursor: saving ? "not-allowed" : "pointer",
+          }}
+        >
+          {saving ? "Ajout..." : "Ajouter le créneau"}
+        </button>
+
+        {error && <p style={{ marginTop: "12px", fontSize: "13px", color: "#dc2626" }}>{error}</p>}
+
+        <h2 style={{ fontSize: "16px", fontWeight: 600, marginTop: "24px", marginBottom: "10px", color: "#111" }}>
+          Créneaux à venir
+        </h2>
+        {slots.length === 0 ? (
+          <p style={{ fontSize: "13px", color: "#6b7280" }}>Aucun créneau.</p>
+        ) : (
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {slots.map((s) => (
+              <li
+                key={s.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "10px 0",
+                  borderBottom: "1px solid #e5e7eb",
+                }}
+              >
+                <span style={{ fontSize: "14px", color: "#111" }}>
+                  {new Date(s.slot_date + "Z").toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "short" })}{" "}
+                  {String(s.start_time).slice(0, 5)} – {String(s.end_time).slice(0, 5)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(s.id)}
+                  style={{ fontSize: "12px", color: "#dc2626", background: "none", border: "none", cursor: "pointer" }}
+                >
+                  Supprimer
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}

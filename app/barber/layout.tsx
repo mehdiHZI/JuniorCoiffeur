@@ -101,6 +101,16 @@ export default function BarberLayout({
           >
             Shop
           </button>
+          <button
+            type="button"
+            style={{
+              ...menuItemBase,
+              ...(pathname.startsWith("/barber/reservation") ? activeItemExtra : {}),
+            }}
+            onClick={() => nav("/barber/reservation")}
+          >
+            Réservation
+          </button>
         </div>
       )}
 

@@ -119,6 +119,19 @@ export default function ClientLayout({
           >
             Shop
           </button>
+          <button
+            type="button"
+            style={{
+              ...menuItemBase,
+              ...(isActive("/client/reservation") ? activeItemExtra : {}),
+            }}
+            onClick={() => {
+              setMenuOpen(false);
+              router.push("/client/reservation");
+            }}
+          >
+            Réservation
+          </button>
         </div>
       )}
 
