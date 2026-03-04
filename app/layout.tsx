@@ -49,6 +49,21 @@ export default function RootLayout({
       >
         <PWARegister />
         <InstallPWAButton />
+        <div
+          style={{
+            position: "fixed",
+            top: "12px",
+            right: "16px",
+            zIndex: 80,
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/chriscut-logo.png"
+            alt="Logo Chriscut"
+            style={{ height: "32px" }}
+          />
+        </div>
         {children}
       </body>
     </html>

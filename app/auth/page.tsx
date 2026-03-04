@@ -81,6 +81,15 @@ export default function AuthPage() {
         boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
       }}>
 
+        <div style={{ textAlign: "center", marginBottom: "20px" }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/chriscut-logo.png"
+            alt="Logo Chriscut"
+            style={{ height: "64px", objectFit: "contain" }}
+          />
+        </div>
+
         {/* Title */}
         <h1 style={{ fontSize: "22px", fontWeight: 600, textAlign: "center", color: "#111", marginBottom: "12px" }}>
           {isResetMode
