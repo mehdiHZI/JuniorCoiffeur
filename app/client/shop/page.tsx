@@ -158,7 +158,7 @@ export default function ClientShopPage() {
 
   const containerStyle: React.CSSProperties = {
     minHeight: "100vh",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#050608",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",

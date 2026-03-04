@@ -144,7 +144,7 @@ export default function ClientHomePage() {
 
   const containerStyle: React.CSSProperties = {
     minHeight: "100vh",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#050608",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -478,7 +478,7 @@ export default function ClientHomePage() {
                             padding: "4px 8px",
                             borderRadius: "8px",
                             border: isMine ? "1px solid #111" : "1px solid #e5e7eb",
-                            background: isMine ? "#f3f4f6" : "transparent",
+                            background: isMine ? "#050608" : "transparent",
                             fontSize: "16px",
                             cursor: "pointer",
                           }}

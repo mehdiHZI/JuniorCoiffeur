@@ -51,7 +51,7 @@ export default function ClientLayout({
   };
 
   const activeItemExtra: React.CSSProperties = {
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#050608",
     fontWeight: 600,
   };
 

@@ -94,7 +94,7 @@ export default function BarberShopPage() {
 
   const containerStyle: React.CSSProperties = {
     minHeight: "100vh",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#050608",
     padding: "24px 16px",
     paddingTop: "60px",
     fontFamily: "'Helvetica Neue', Arial, sans-serif",
