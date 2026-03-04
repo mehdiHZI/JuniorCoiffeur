@@ -4,7 +4,7 @@
   "description": "Gère tes points fidélité et tes visites chez le coiffeur",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#050608",
+  "background_color": "#f3f4f6",
   "theme_color": "#111",
   "orientation": "portrait-primary",
   "icons": [

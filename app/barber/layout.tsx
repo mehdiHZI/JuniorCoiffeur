@@ -50,7 +50,7 @@ export default function BarberLayout({
   };
 
   const activeItemExtra: React.CSSProperties = {
-    backgroundColor: "#050608",
+    backgroundColor: "#f3f4f6",
     fontWeight: 600,
   };
 

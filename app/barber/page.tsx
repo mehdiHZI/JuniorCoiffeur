@@ -154,7 +154,7 @@ export default function BarberPage() {
 
   const containerStyle: React.CSSProperties = {
     minHeight: "100vh",
-    backgroundColor: "transparent",
+    backgroundColor: "#f3f4f6",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",

@@ -46,15 +46,6 @@ export default function RootLayout({
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        style={{
-          margin: 0,
-          minHeight: "100vh",
-          backgroundColor: "#050608",
-          backgroundImage: "url('/chriscut-logo.png')",
-          backgroundRepeat: "no-repeat",
-          backgroundPosition: "center center",
-          backgroundSize: "contain",
-        }}
       >
         <PWARegister />
         <InstallPWAButton />
