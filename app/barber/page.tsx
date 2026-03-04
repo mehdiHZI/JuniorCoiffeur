@@ -12,6 +12,34 @@ export default function BarberPage() {
 
   const [scanOn, setScanOn] = useState(false);
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  const playScanBeep = () => {
+    if (typeof window === "undefined") return;
+    try {
+      const AudioContextClass =
+        (window as unknown as { AudioContext?: typeof AudioContext }).AudioContext ??
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextClass) return;
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioContextClass();
+      }
+      const ctx = audioCtxRef.current;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 880;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      const now = ctx.currentTime;
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+      osc.start(now);
+      osc.stop(now + 0.16);
+    } catch {
+      // ignore audio errors (permissions / browser support)
+    }
+  };
 
   useEffect(() => {
     const t = token.trim();
@@ -81,6 +109,7 @@ export default function BarberPage() {
 
     scanner.render(
       (decodedText) => {
+        playScanBeep();
         setToken(String(decodedText || "").trim());
         setScanOn(false); // stop automatique après scan
       },

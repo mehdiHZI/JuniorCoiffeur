@@ -10,6 +10,7 @@ export default function ClientHomePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [customerId, setCustomerId] = useState<number | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const objectUrlRef = useRef<string | null>(null);
@@ -23,6 +24,7 @@ export default function ClientHomePage() {
   const [reactionsByPost, setReactionsByPost] = useState<
     Record<number, { counts: Record<string, number>; myEmoji: string | null }>
   >({});
+  const [pointsNotification, setPointsNotification] = useState<string | null>(null);
 
   useEffect(() => {
     const run = async () => {
@@ -88,6 +90,7 @@ export default function ClientHomePage() {
         0
       );
       setPoints(total);
+      setCustomerId(customer.id);
 
       const { data: lastTxs } = await supabase
         .from("transactions")
@@ -133,6 +136,51 @@ export default function ClientHomePage() {
 
     run();
   }, [router]);
+
+  useEffect(() => {
+    if (!customerId) return;
+
+    const channel = supabase
+      .channel(`transactions-customer-${customerId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "transactions",
+          filter: `customer_id=eq.${customerId}`,
+        },
+        (payload) => {
+          const row = payload.new as {
+            id: number;
+            created_at: string;
+            points: number | null;
+          };
+          const delta = row.points ?? 0;
+          if (delta <= 0) return;
+
+          setPoints((prev) => prev + delta);
+          setRecentVisits((prev) => {
+            const next = [
+              { id: row.id, created_at: row.created_at, points: row.points },
+              ...prev,
+            ];
+            return next.slice(0, 3);
+          });
+          setPointsNotification(
+            `Tu viens de recevoir ${delta} points chez ton coiffeur.`
+          );
+          window.setTimeout(() => {
+            setPointsNotification(null);
+          }, 4000);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [customerId]);
 
   useEffect(() => {
     return () => {
@@ -356,6 +404,18 @@ export default function ClientHomePage() {
             Points cumulés :{" "}
             <span style={{ fontWeight: 600, color: "#111" }}>{points}</span>
           </div>
+          {pointsNotification && (
+            <p
+              style={{
+                marginTop: "10px",
+                fontSize: "13px",
+                color: "#16a34a",
+                textAlign: "center",
+              }}
+            >
+              {pointsNotification}
+            </p>
+          )}
         </div>
 
         <div>
