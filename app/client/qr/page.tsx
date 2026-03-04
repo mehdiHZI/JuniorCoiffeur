@@ -86,11 +86,6 @@ export default function ClientQrPage() {
     gen();
   }, [qrValue]);
 
-  const logout = async () => {
-    await supabase.auth.signOut();
-    router.push("/auth");
-  };
-
   const containerStyle: React.CSSProperties = {
     minHeight: "100vh",
     backgroundColor: "#f3f4f6",
@@ -135,38 +130,13 @@ export default function ClientQrPage() {
           Montre ce QR code au coiffeur pour gagner des points.
         </p>
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: "20px",
-          }}
-        >
-          <div>
-            <div
-              style={{ fontSize: "12px", color: "#6b7280", marginBottom: "2px" }}
-            >
-              Points
-            </div>
-            <div style={{ fontSize: "28px", fontWeight: 700 }}>{points}</div>
-          </div>
-
-          <button
-            onClick={logout}
-            style={{
-              padding: "8px 14px",
-              borderRadius: "9999px",
-              border: "none",
-              backgroundColor: "#111",
-              color: "#fff",
-              fontSize: "13px",
-              fontWeight: 500,
-              cursor: "pointer",
-            }}
+        <div style={{ marginBottom: "20px" }}>
+          <div
+            style={{ fontSize: "12px", color: "#6b7280", marginBottom: "2px" }}
           >
-            Déconnexion
-          </button>
+            Points
+          </div>
+          <div style={{ fontSize: "28px", fontWeight: 700 }}>{points}</div>
         </div>
 
         <div

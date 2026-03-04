@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function ClientLayout({
   children,
@@ -131,6 +132,21 @@ export default function ClientLayout({
             }}
           >
             Réservation
+          </button>
+          <button
+            type="button"
+            style={{
+              ...menuItemBase,
+              color: "#dc2626",
+              borderTop: "1px solid #e5e7eb",
+            }}
+            onClick={async () => {
+              setMenuOpen(false);
+              await supabase.auth.signOut();
+              router.push("/auth");
+            }}
+          >
+            Déconnexion
           </button>
         </div>
       )}
