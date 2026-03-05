@@ -40,7 +40,18 @@ export default function AuthPage() {
       // Si pas de profil ou erreur RLS, on envoie par défaut sur l'espace client
       router.push(profile?.role === "barber" ? "/barber" : "/client");
     } else {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            first_name: firstName.trim() || null,
+            last_name: lastName.trim() || null,
+            phone: phone.trim() || null,
+            birthdate: birthdate || null,
+          },
+        },
+      });
       if (error) { setErr(error.message); setLoading(false); return; }
       const user = data.user;
       if (user) {
@@ -49,14 +60,24 @@ export default function AuthPage() {
           full_name: (fullName || `${firstName} ${lastName}` || "").trim() || null,
           role: "client" as const,
           email: user.email ?? email ?? null,
-          first_name: firstName || null,
-          last_name: lastName || null,
-          phone: phone || null,
+          first_name: firstName.trim() || null,
+          last_name: lastName.trim() || null,
+          phone: phone.trim() || null,
           birthdate: birthdate || null,
         };
 
-        await supabase.from("profiles").upsert(profilePayload, { onConflict: "id" });
-        await supabase.from("customers").insert({ user_id: user.id, qr_token: uuidv4() });
+        const { error: profileErr } = await supabase.from("profiles").upsert(profilePayload, { onConflict: "id" });
+        if (profileErr) {
+          setErr(`Profil : ${profileErr.message}`);
+          setLoading(false);
+          return;
+        }
+        const { error: customerErr } = await supabase.from("customers").insert({ user_id: user.id, qr_token: uuidv4() });
+        if (customerErr) {
+          setErr(`Compte client : ${customerErr.message}`);
+          setLoading(false);
+          return;
+        }
       }
       router.push("/client");
     }
