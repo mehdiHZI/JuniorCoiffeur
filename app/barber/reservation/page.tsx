@@ -4,6 +4,32 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
+const SLOT_DURATION_MINUTES = 40;
+
+function timeToMinutes(t: string): number {
+  const [h, m] = String(t).split(":").map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+}
+
+function minutesToTime(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function buildSlotsFromRange(startTime: string, endTime: string): { start: string; end: string }[] {
+  const startMin = timeToMinutes(startTime);
+  const endMin = timeToMinutes(endTime);
+  const slots: { start: string; end: string }[] = [];
+  for (let t = startMin; t + SLOT_DURATION_MINUTES <= endMin; t += SLOT_DURATION_MINUTES) {
+    slots.push({
+      start: minutesToTime(t),
+      end: minutesToTime(t + SLOT_DURATION_MINUTES),
+    });
+  }
+  return slots;
+}
+
 type Slot = {
   id: number;
   slot_date: string;
@@ -18,8 +44,8 @@ export default function BarberReservationPage() {
   const [bookingEmails, setBookingEmails] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [slotDate, setSlotDate] = useState("");
-  const [startTime, setStartTime] = useState("09:00");
-  const [endTime, setEndTime] = useState("10:00");
+  const [startTime, setStartTime] = useState("08:00");
+  const [endTime, setEndTime] = useState("12:00");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -121,24 +147,30 @@ export default function BarberReservationPage() {
       setError("L'heure de fin doit être après l'heure de début.");
       return;
     }
+    const generated = buildSlotsFromRange(startTime, endTime);
+    if (generated.length === 0) {
+      setError("La plage doit couvrir au moins 40 minutes.");
+      return;
+    }
     const { data: authData } = await supabase.auth.getUser();
     if (!authData.user) return;
     setSaving(true);
     setError(null);
-    const { error: err } = await supabase.from("availability_slots").insert({
+    const rows = generated.map(({ start, end }) => ({
       slot_date: slotDate,
-      start_time: startTime,
-      end_time: endTime,
-      created_by: authData.user.id,
-    });
+      start_time: start,
+      end_time: end,
+      created_by: authData.user!.id,
+    }));
+    const { error: err } = await supabase.from("availability_slots").insert(rows);
     if (err) {
       setError(err.message);
       setSaving(false);
       return;
     }
     setSlotDate("");
-    setStartTime("09:00");
-    setEndTime("10:00");
+    setStartTime("08:00");
+    setEndTime("12:00");
     await loadSlots();
     setSaving(false);
   };
@@ -185,7 +217,7 @@ export default function BarberReservationPage() {
           Réservation
         </h1>
         <p style={{ fontSize: "14px", color: "#4b5563", marginBottom: "20px" }}>
-          Ajoute des créneaux. Les clients pourront les réserver.
+          Indique une plage où tu es dispo : des créneaux de 40 min seront créés automatiquement (ex. 8h–12h → 8h00, 8h40, 9h20…).
         </p>
 
         <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "4px", color: "#374151" }}>Date</label>
@@ -204,7 +236,7 @@ export default function BarberReservationPage() {
             fontSize: "14px",
           }}
         />
-        <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "4px", color: "#374151" }}>Heure début</label>
+        <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "4px", color: "#374151" }}>Dispo de (heure début)</label>
         <input
           type="time"
           value={startTime}
@@ -219,7 +251,7 @@ export default function BarberReservationPage() {
             fontSize: "14px",
           }}
         />
-        <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "4px", color: "#374151" }}>Heure fin</label>
+        <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "4px", color: "#374151" }}>Dispo jusqu'à (heure fin)</label>
         <input
           type="time"
           value={endTime}
@@ -250,7 +282,7 @@ export default function BarberReservationPage() {
             cursor: saving ? "not-allowed" : "pointer",
           }}
         >
-          {saving ? "Ajout..." : "Ajouter le créneau"}
+          {saving ? "Création des créneaux..." : "Créer les créneaux (40 min)"}
         </button>
 
         {error && <p style={{ marginTop: "12px", fontSize: "13px", color: "#dc2626" }}>{error}</p>}
