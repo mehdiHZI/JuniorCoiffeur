@@ -44,18 +44,18 @@ export default function AuthPage() {
       if (error) { setErr(error.message); setLoading(false); return; }
       const user = data.user;
       if (user) {
-        const profilePayload: Record<string, unknown> = {
+        const profilePayload = {
           id: user.id,
-          full_name: fullName || `${firstName} ${lastName}`.trim(),
-          role: "client",
-          email: user.email ?? undefined,
+          full_name: (fullName || `${firstName} ${lastName}` || "").trim() || null,
+          role: "client" as const,
+          email: user.email ?? email ?? null,
+          first_name: firstName || null,
+          last_name: lastName || null,
+          phone: phone || null,
+          birthdate: birthdate || null,
         };
-        if (firstName) profilePayload.first_name = firstName;
-        if (lastName) profilePayload.last_name = lastName;
-        if (phone) profilePayload.phone = phone;
-        if (birthdate) profilePayload.birthdate = birthdate;
 
-        await supabase.from("profiles").insert(profilePayload);
+        await supabase.from("profiles").upsert(profilePayload, { onConflict: "id" });
         await supabase.from("customers").insert({ user_id: user.id, qr_token: uuidv4() });
       }
       router.push("/client");
