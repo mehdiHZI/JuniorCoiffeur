@@ -32,8 +32,18 @@ BEGIN
 END;
 $$;
 
--- 4) RLS : le coiffeur peut lire les profils (pour afficher l'email du client qui a réservé)
+-- 4) RLS : tout utilisateur connecté peut lire son propre profil (pour la redirection login barber/client)
+DROP POLICY IF EXISTS "Users can read own profile" ON profiles;
+CREATE POLICY "Users can read own profile"
+ON profiles FOR SELECT TO authenticated
+USING (id = auth.uid());
+
+-- 5) RLS : le coiffeur peut lire tous les profils (pour afficher l'email du client qui a réservé)
 DROP POLICY IF EXISTS "Barbers can read profiles" ON profiles;
 CREATE POLICY "Barbers can read profiles"
 ON profiles FOR SELECT TO authenticated
 USING (EXISTS (SELECT 1 FROM profiles me WHERE me.id = auth.uid() AND me.role = 'barber'));
+
+-- 6) Si ton compte barber existe déjà dans Auth mais pas en barber dans profiles, exécute une fois (remplace l'email) :
+--    UPDATE public.profiles SET role = 'barber' WHERE id = (SELECT id FROM auth.users WHERE email = 'ton-email-barber@exemple.com');
+--    Si le profil n'existe pas encore pour ce user : INSERT INTO public.profiles (id, role) SELECT id, 'barber' FROM auth.users WHERE email = 'ton-email-barber@exemple.com' ON CONFLICT (id) DO UPDATE SET role = 'barber';

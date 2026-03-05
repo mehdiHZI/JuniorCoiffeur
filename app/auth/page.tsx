@@ -28,7 +28,16 @@ export default function AuthPage() {
       if (error) { setErr(error.message); setLoading(false); return; }
       const user = data.user;
       if (!user) { setErr("Connexion échouée."); setLoading(false); return; }
-      const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+      const { data: profile, error: profileErr } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (profileErr) {
+        setErr("Impossible de charger le profil. Réessaie.");
+        setLoading(false);
+        return;
+      }
       router.push(profile?.role === "barber" ? "/barber" : "/client");
     } else {
       const { data, error } = await supabase.auth.signUp({ email, password });
