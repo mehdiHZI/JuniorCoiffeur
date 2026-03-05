@@ -88,12 +88,17 @@ CREATE POLICY "Users can insert own profile"
 ON profiles FOR INSERT TO authenticated
 WITH CHECK (id = auth.uid());
 
--- 5) RLS : le coiffeur peut lire tous les profils (pour afficher l'email du client qui a réservé)
+-- 5) Rôle du user courant sans récursion RLS (évite "infinite recursion" sur policies profiles)
+CREATE OR REPLACE FUNCTION public.get_my_profile_role()
+RETURNS text LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
+AS $$ SELECT role FROM profiles WHERE id = auth.uid() LIMIT 1; $$;
+
+-- 6) RLS : le coiffeur peut lire tous les profils (pour afficher l'email du client qui a réservé)
 DROP POLICY IF EXISTS "Barbers can read profiles" ON profiles;
 CREATE POLICY "Barbers can read profiles"
 ON profiles FOR SELECT TO authenticated
-USING (EXISTS (SELECT 1 FROM profiles me WHERE me.id = auth.uid() AND me.role = 'barber'));
+USING (public.get_my_profile_role() = 'barber');
 
--- 6) Si ton compte barber existe déjà dans Auth mais pas en barber dans profiles, exécute une fois (remplace l'email) :
+-- 7) Si ton compte barber existe déjà dans Auth mais pas en barber dans profiles, exécute une fois (remplace l'email) :
 --    UPDATE public.profiles SET role = 'barber' WHERE id = (SELECT id FROM auth.users WHERE email = 'ton-email-barber@exemple.com');
 --    Si le profil n'existe pas encore pour ce user : INSERT INTO public.profiles (id, role) SELECT id, 'barber' FROM auth.users WHERE email = 'ton-email-barber@exemple.com' ON CONFLICT (id) DO UPDATE SET role = 'barber';
