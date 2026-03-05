@@ -35,7 +35,7 @@ export default function AuthPage() {
       if (error) { setErr(error.message); setLoading(false); return; }
       const user = data.user;
       if (user) {
-        await supabase.from("profiles").insert({ id: user.id, full_name: fullName, role: "client" });
+        await supabase.from("profiles").insert({ id: user.id, full_name: fullName, role: "client", email: user.email ?? undefined });
         await supabase.from("customers").insert({ user_id: user.id, qr_token: uuidv4() });
       }
       router.push("/client");

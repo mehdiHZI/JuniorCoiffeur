@@ -15,6 +15,7 @@ type Slot = {
 export default function BarberReservationPage() {
   const router = useRouter();
   const [slots, setSlots] = useState<Slot[]>([]);
+  const [bookingEmails, setBookingEmails] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [slotDate, setSlotDate] = useState("");
   const [startTime, setStartTime] = useState("09:00");
@@ -37,7 +38,56 @@ export default function BarberReservationPage() {
       setSlots([]);
       return;
     }
-    setSlots((data as Slot[]) ?? []);
+    const slotList = (data as Slot[]) ?? [];
+    setSlots(slotList);
+
+    if (slotList.length === 0) {
+      setBookingEmails({});
+      return;
+    }
+    const slotIds = slotList.map((s) => s.id);
+    const { data: bookings } = await supabase
+      .from("bookings")
+      .select("slot_id, customer_id")
+      .in("slot_id", slotIds);
+    if (!bookings?.length) {
+      setBookingEmails({});
+      return;
+    }
+    const customerIds = [...new Set((bookings as { customer_id: string }[]).map((b) => b.customer_id))];
+    const { data: customers } = await supabase
+      .from("customers")
+      .select("id, user_id")
+      .in("id", customerIds);
+    const userIds = (customers ?? [])
+      .map((c) => (c as { user_id: string }).user_id)
+      .filter(Boolean);
+    if (userIds.length === 0) {
+      setBookingEmails({});
+      return;
+    }
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, email")
+      .in("id", userIds);
+    const userToEmail: Record<string, string> = {};
+    (profiles ?? []).forEach((p) => {
+      const pid = (p as { id: string; email: string | null }).id;
+      const email = (p as { id: string; email: string | null }).email ?? "";
+      userToEmail[pid] = email;
+    });
+    const customerToUser: Record<string, string> = {};
+    (customers ?? []).forEach((c) => {
+      const cid = (c as { id: string; user_id: string }).id;
+      const uid = (c as { id: string; user_id: string }).user_id;
+      customerToUser[cid] = uid;
+    });
+    const slotToEmail: Record<number, string> = {};
+    (bookings as { slot_id: number; customer_id: string }[]).forEach((b) => {
+      const email = userToEmail[customerToUser[b.customer_id]];
+      if (email) slotToEmail[b.slot_id] = email;
+    });
+    setBookingEmails(slotToEmail);
   };
 
   useEffect(() => {
@@ -217,26 +267,33 @@ export default function BarberReservationPage() {
                 key={s.id}
                 style={{
                   display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
+                  flexDirection: "column",
+                  gap: "4px",
                   padding: "10px 0",
                   borderBottom: "1px solid #e5e7eb",
                 }}
               >
-                <span style={{ fontSize: "14px", color: "#111" }}>
-                  {(() => {
-                    const [y, m, d] = s.slot_date.split("-").map(Number);
-                    return new Date(y, m - 1, d).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "short" });
-                  })()}{" "}
-                  {String(s.start_time).slice(0, 5)} – {String(s.end_time).slice(0, 5)}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(s.id)}
-                  style={{ fontSize: "12px", color: "#dc2626", background: "none", border: "none", cursor: "pointer" }}
-                >
-                  Supprimer
-                </button>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "14px", color: "#111" }}>
+                    {(() => {
+                      const [y, m, d] = s.slot_date.split("-").map(Number);
+                      return new Date(y, m - 1, d).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "short" });
+                    })()}{" "}
+                    {String(s.start_time).slice(0, 5)} – {String(s.end_time).slice(0, 5)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(s.id)}
+                    style={{ fontSize: "12px", color: "#dc2626", background: "none", border: "none", cursor: "pointer" }}
+                  >
+                    Supprimer
+                  </button>
+                </div>
+                {bookingEmails[s.id] && (
+                  <span style={{ fontSize: "13px", color: "#4b5563" }} title="Réservé par">
+                    Réservé par : {bookingEmails[s.id]}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
