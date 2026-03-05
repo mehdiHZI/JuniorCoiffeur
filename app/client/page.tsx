@@ -11,6 +11,7 @@ export default function ClientHomePage() {
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [customerId, setCustomerId] = useState<number | null>(null);
+  const [displayName, setDisplayName] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const objectUrlRef = useRef<string | null>(null);
@@ -44,11 +45,21 @@ export default function ClientHomePage() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("avatar_url")
+        .select("avatar_url, first_name, last_name, full_name")
         .eq("id", user.id)
         .maybeSingle();
-      if (profile?.avatar_url) {
-        setAvatarUrl(profile.avatar_url as string);
+      if (profile) {
+        if ((profile as { avatar_url?: string | null }).avatar_url) {
+          setAvatarUrl((profile as { avatar_url: string }).avatar_url);
+        }
+        const p = profile as {
+          first_name?: string | null;
+          last_name?: string | null;
+          full_name?: string | null;
+        };
+        const fromParts = `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim();
+        const name = (fromParts || p.full_name || "").trim();
+        if (name) setDisplayName(name);
       }
 
       const { data: existingCustomer, error: customerErr } = await supabase
@@ -368,18 +379,31 @@ export default function ClientHomePage() {
           style={{
             fontSize: "22px",
             fontWeight: 600,
-            marginBottom: "6px",
+            marginBottom: "4px",
             color: "#111",
             textAlign: "center",
           }}
         >
           Espace client
         </h1>
+        {displayName && (
+          <p
+            style={{
+              fontSize: "16px",
+              fontWeight: 500,
+              color: "#111",
+              textAlign: "center",
+              marginBottom: "4px",
+            }}
+          >
+            Bienvenue {displayName}
+          </p>
+        )}
         <p
           style={{
             fontSize: "14px",
             color: "#4b5563",
-            marginTop: "8px",
+            marginTop: "4px",
             textAlign: "center",
           }}
         >
