@@ -52,34 +52,27 @@ export default function AuthPage() {
           },
         },
       });
-      if (error) { setErr(error.message); setLoading(false); return; }
-      const user = data.user;
+      const user = data?.user;
+      const isEmailRateLimit = error?.message?.toLowerCase().includes("rate limit");
+      if (error && !(isEmailRateLimit && user)) {
+        setErr(error.message);
+        setLoading(false);
+        return;
+      }
       if (user) {
-        const profilePayload = {
-          id: user.id,
-          full_name: (fullName || `${firstName} ${lastName}` || "").trim() || null,
-          role: "client" as const,
-          email: user.email ?? email ?? null,
-          first_name: firstName.trim() || null,
-          last_name: lastName.trim() || null,
-          phone: phone.trim() || null,
-          birthdate: birthdate || null,
-        };
-
-        const { error: profileErr } = await supabase.from("profiles").upsert(profilePayload, { onConflict: "id" });
-        if (profileErr) {
-          setErr(`Profil : ${profileErr.message}`);
-          setLoading(false);
-          return;
-        }
+        // Le profil est déjà créé/rempli par le trigger handle_new_user_profile (auth.users) → pas d’upsert client (évite RLS)
         const { error: customerErr } = await supabase.from("customers").insert({ user_id: user.id, qr_token: uuidv4() });
         if (customerErr) {
           setErr(`Compte client : ${customerErr.message}`);
           setLoading(false);
           return;
         }
+        router.push("/client");
+      } else if (isEmailRateLimit) {
+        setErr("Trop d’envois d’emails. Vérifie ta boîte mail (le compte a peut-être été créé) ou réessaie dans quelques minutes.");
+        setLoading(false);
+        return;
       }
-      router.push("/client");
     }
     setLoading(false);
   };
