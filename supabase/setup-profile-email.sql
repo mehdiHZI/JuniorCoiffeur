@@ -42,6 +42,12 @@ CREATE POLICY "Users can read own profile"
 ON profiles FOR SELECT TO authenticated
 USING (id = auth.uid());
 
+-- 4bis) RLS : tout utilisateur connecté peut créer sa propre ligne profil (signup)
+DROP POLICY IF EXISTS "Users can insert own profile" ON profiles;
+CREATE POLICY "Users can insert own profile"
+ON profiles FOR INSERT TO authenticated
+WITH CHECK (id = auth.uid());
+
 -- 5) RLS : le coiffeur peut lire tous les profils (pour afficher l'email du client qui a réservé)
 DROP POLICY IF EXISTS "Barbers can read profiles" ON profiles;
 CREATE POLICY "Barbers can read profiles"

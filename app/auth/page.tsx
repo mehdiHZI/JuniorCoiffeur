@@ -32,16 +32,12 @@ export default function AuthPage() {
       if (error) { setErr(error.message); setLoading(false); return; }
       const user = data.user;
       if (!user) { setErr("Connexion échouée."); setLoading(false); return; }
-      const { data: profile, error: profileErr } = await supabase
+      const { data: profile } = await supabase
         .from("profiles")
         .select("role")
         .eq("id", user.id)
         .maybeSingle();
-      if (profileErr) {
-        setErr("Impossible de charger le profil. Réessaie.");
-        setLoading(false);
-        return;
-      }
+      // Si pas de profil ou erreur RLS, on envoie par défaut sur l'espace client
       router.push(profile?.role === "barber" ? "/barber" : "/client");
     } else {
       const { data, error } = await supabase.auth.signUp({ email, password });
