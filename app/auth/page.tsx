@@ -3,8 +3,6 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
-import { v4 as uuidv4 } from "uuid";
-
 export default function AuthPage() {
   const router = useRouter();
 
@@ -61,12 +59,6 @@ export default function AuthPage() {
       }
       if (user) {
         // Le profil est déjà créé/rempli par le trigger handle_new_user_profile (auth.users) → pas d’upsert client (évite RLS)
-        const { error: customerErr } = await supabase.from("customers").insert({ user_id: user.id, qr_token: uuidv4() });
-        if (customerErr) {
-          setErr(`Compte client : ${customerErr.message}`);
-          setLoading(false);
-          return;
-        }
         router.push("/client");
       } else if (isEmailRateLimit) {
         setErr("Trop d’envois d’emails. Vérifie ta boîte mail (le compte a peut-être été créé) ou réessaie dans quelques minutes.");

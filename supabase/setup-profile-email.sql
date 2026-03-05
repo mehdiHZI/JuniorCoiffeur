@@ -39,6 +39,10 @@ BEGIN
     phone = COALESCE(EXCLUDED.phone, profiles.phone),
     birthdate = COALESCE(EXCLUDED.birthdate, profiles.birthdate),
     full_name = COALESCE(EXCLUDED.full_name, profiles.full_name);
+
+  INSERT INTO public.customers (user_id, qr_token)
+  SELECT new.id, gen_random_uuid()::text
+  WHERE NOT EXISTS (SELECT 1 FROM public.customers WHERE user_id = new.id);
   RETURN new;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
