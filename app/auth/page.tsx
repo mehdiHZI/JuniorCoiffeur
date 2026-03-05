@@ -11,6 +11,10 @@ export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [birthdate, setBirthdate] = useState("");
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -44,7 +48,18 @@ export default function AuthPage() {
       if (error) { setErr(error.message); setLoading(false); return; }
       const user = data.user;
       if (user) {
-        await supabase.from("profiles").insert({ id: user.id, full_name: fullName, role: "client", email: user.email ?? undefined });
+        const profilePayload: Record<string, unknown> = {
+          id: user.id,
+          full_name: fullName || `${firstName} ${lastName}`.trim(),
+          role: "client",
+          email: user.email ?? undefined,
+        };
+        if (firstName) profilePayload.first_name = firstName;
+        if (lastName) profilePayload.last_name = lastName;
+        if (phone) profilePayload.phone = phone;
+        if (birthdate) profilePayload.birthdate = birthdate;
+
+        await supabase.from("profiles").insert(profilePayload);
         await supabase.from("customers").insert({ user_id: user.id, qr_token: uuidv4() });
       }
       router.push("/client");
@@ -114,19 +129,56 @@ export default function AuthPage() {
           </p>
         )}
 
-        {/* Full name (signup only) */}
+        {/* Identité + infos perso (signup only) */}
         {!isResetMode && !isLogin && (
-          <div style={{ marginBottom: "16px" }}>
-            <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#222", marginBottom: "6px" }}>
-              Nom complet *
-            </label>
-            <input
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="Nom complet"
-              style={inputStyle}
-            />
-          </div>
+          <>
+            <div style={{ marginBottom: "12px", display: "flex", gap: "8px" }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#222", marginBottom: "6px" }}>
+                  Prénom *
+                </label>
+                <input
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="Prénom"
+                  style={inputStyle}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#222", marginBottom: "6px" }}>
+                  Nom *
+                </label>
+                <input
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Nom"
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+            <div style={{ marginBottom: "12px" }}>
+              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#222", marginBottom: "6px" }}>
+                Numéro de téléphone *
+              </label>
+              <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="06 12 34 56 78"
+                style={inputStyle}
+              />
+            </div>
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, color: "#222", marginBottom: "6px" }}>
+                Date de naissance *
+              </label>
+              <input
+                type="date"
+                value={birthdate}
+                onChange={(e) => setBirthdate(e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+          </>
         )}
 
         {/* Email */}

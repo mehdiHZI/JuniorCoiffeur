@@ -1,9 +1,13 @@
 -- À exécuter dans Supabase : SQL Editor → New query → Coller → Run
 -- Permet au coiffeur de voir l'email du client qui a réservé (via profiles.email).
 
--- 1) Colonne email sur profiles (synchro avec auth au signup côté app + trigger ci-dessous)
+-- 1) Colonnes profil de base (email, prénom, nom, téléphone, date de naissance)
 ALTER TABLE profiles
-ADD COLUMN IF NOT EXISTS email text;
+ADD COLUMN IF NOT EXISTS email text,
+ADD COLUMN IF NOT EXISTS first_name text,
+ADD COLUMN IF NOT EXISTS last_name text,
+ADD COLUMN IF NOT EXISTS phone text,
+ADD COLUMN IF NOT EXISTS birthdate date;
 
 -- 2) Sync email auth → profiles (insert/update auth.users)
 CREATE OR REPLACE FUNCTION public.sync_profile_email_from_auth()
