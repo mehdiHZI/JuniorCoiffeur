@@ -158,6 +158,19 @@ export default function ClientLayout({
             type="button"
             style={{
               ...menuItemBase,
+              ...(isActive("/client/profil") ? activeItemExtra : {}),
+            }}
+            onClick={() => {
+              setMenuOpen(false);
+              router.push("/client/profil");
+            }}
+          >
+            Profil
+          </button>
+          <button
+            type="button"
+            style={{
+              ...menuItemBase,
               color: "#dc2626",
               borderTop: "1px solid #e5e7eb",
             }}
