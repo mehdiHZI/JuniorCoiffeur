@@ -4,11 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
+import { useClientRealtime } from "../ClientRealtimeContext";
 
 export default function ClientQrPage() {
   const router = useRouter();
+  const { transactionUpdateVersion } = useClientRealtime();
 
   const [loading, setLoading] = useState(true);
+  const [customerId, setCustomerId] = useState<string | null>(null);
   const [qrToken, setQrToken] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [points, setPoints] = useState<number>(0);
@@ -62,6 +65,7 @@ export default function ClientQrPage() {
       }
 
       setQrToken(customer!.qr_token);
+      setCustomerId((customer as { id: string }).id);
 
       const { data: txs } = await supabase
         .from("transactions")
@@ -76,6 +80,19 @@ export default function ClientQrPage() {
 
     run();
   }, [router]);
+
+  useEffect(() => {
+    if (!customerId || transactionUpdateVersion === 0) return;
+    const refetch = async () => {
+      const { data: txs } = await supabase
+        .from("transactions")
+        .select("points")
+        .eq("customer_id", customerId);
+      const total = (txs ?? []).reduce((acc: number, t: { points: number | null }) => acc + (t.points ?? 0), 0);
+      setPoints(total);
+    };
+    refetch();
+  }, [customerId, transactionUpdateVersion]);
 
   useEffect(() => {
     const gen = async () => {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
+import { useClientRealtime } from "../ClientRealtimeContext";
 
 type Visit = {
   id: number;
@@ -12,7 +13,9 @@ type Visit = {
 
 export default function ClientHistoriquePage() {
   const router = useRouter();
+  const { transactionUpdateVersion } = useClientRealtime();
   const [loading, setLoading] = useState(true);
+  const [customerId, setCustomerId] = useState<string | null>(null);
   const [visits, setVisits] = useState<Visit[]>([]);
 
   useEffect(() => {
@@ -37,6 +40,8 @@ export default function ClientHistoriquePage() {
         return;
       }
 
+      setCustomerId((customer as { id: string }).id);
+
       const { data: rows } = await supabase
         .from("transactions")
         .select("id, created_at, points")
@@ -49,6 +54,19 @@ export default function ClientHistoriquePage() {
 
     run();
   }, [router]);
+
+  useEffect(() => {
+    if (!customerId || transactionUpdateVersion === 0) return;
+    const refetch = async () => {
+      const { data: rows } = await supabase
+        .from("transactions")
+        .select("id, created_at, points")
+        .eq("customer_id", customerId)
+        .order("created_at", { ascending: false });
+      setVisits((rows as Visit[]) ?? []);
+    };
+    refetch();
+  }, [customerId, transactionUpdateVersion]);
 
   const containerStyle: React.CSSProperties = {
     minHeight: "100vh",

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
+import { useClientRealtime } from "../ClientRealtimeContext";
 
 type ShopItem = {
   id: number;
@@ -14,6 +15,7 @@ type ShopItem = {
 
 export default function ClientShopPage() {
   const router = useRouter();
+  const { transactionUpdateVersion } = useClientRealtime();
   const [loading, setLoading] = useState(true);
   const [customerId, setCustomerId] = useState<number | null>(null);
   const [points, setPoints] = useState(0);
@@ -114,6 +116,30 @@ export default function ClientShopPage() {
 
     run();
   }, [router]);
+
+  useEffect(() => {
+    if (!customerId || transactionUpdateVersion === 0) return;
+    const refetch = async () => {
+      const { data: txs } = await supabase
+        .from("transactions")
+        .select("points, shop_item_id")
+        .eq("customer_id", customerId)
+        .order("created_at", { ascending: false });
+      const list = txs ?? [];
+      const total = list.reduce((acc: number, t: { points: number | null }) => acc + (t.points ?? 0), 0);
+      setPoints(total);
+      const last = list[0] as { points: number | null; shop_item_id: number | null } | undefined;
+      if (last && (last.points ?? 0) < 0 && last.shop_item_id != null) {
+        const { data: shopItems } = await supabase
+          .from("shop_items")
+          .select("id, is_coupe_offerte")
+          .eq("id", last.shop_item_id)
+          .maybeSingle();
+        setPendingCoupeOfferte(!!(shopItems as { is_coupe_offerte?: boolean } | null)?.is_coupe_offerte);
+      }
+    };
+    refetch();
+  }, [customerId, transactionUpdateVersion]);
 
   const openConfirm = (item: ShopItem) => {
     if (item.is_coupe_offerte && pendingCoupeOfferte) return;

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
+import { useClientRealtime } from "./ClientRealtimeContext";
 
 const FEED_EMOJIS = ["👍", "❤️", "😂", "😮", "😢"];
 const SEEN_CANCELLATIONS_KEY = "chriscut_seen_cancellation_ids";
@@ -18,6 +19,7 @@ type CancellationItem = {
 
 export default function ClientHomePage() {
   const router = useRouter();
+  const { transactionUpdateVersion } = useClientRealtime();
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [customerId, setCustomerId] = useState<number | null>(null);
@@ -218,50 +220,29 @@ export default function ClientHomePage() {
     run();
   }, [router]);
 
+  // Refetch points et dernières visites quand le coiffeur a scanné (realtime dans le layout)
   useEffect(() => {
-    if (!customerId) return;
+    if (!customerId || transactionUpdateVersion === 0) return;
 
-    const channel = supabase
-      .channel(`transactions-customer-${customerId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "transactions",
-          filter: `customer_id=eq.${customerId}`,
-        },
-        (payload) => {
-          const row = payload.new as {
-            id: number;
-            created_at: string;
-            points: number | null;
-          };
-          const delta = row.points ?? 0;
-          if (delta <= 0) return;
+    const refetch = async () => {
+      const { data: txs } = await supabase
+        .from("transactions")
+        .select("points")
+        .eq("customer_id", customerId);
+      const total = (txs ?? []).reduce((acc: number, t: { points: number | null }) => acc + (t.points ?? 0), 0);
+      setPoints(total);
 
-          setPoints((prev) => prev + delta);
-          setRecentVisits((prev) => {
-            const next = [
-              { id: row.id, created_at: row.created_at, points: row.points },
-              ...prev,
-            ];
-            return next.slice(0, 3);
-          });
-          setPointsNotification(
-            `Tu viens de recevoir ${delta} points chez ton coiffeur.`
-          );
-          window.setTimeout(() => {
-            setPointsNotification(null);
-          }, 4000);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
+      const { data: lastTxs } = await supabase
+        .from("transactions")
+        .select("id, points, created_at")
+        .eq("customer_id", customerId)
+        .order("created_at", { ascending: false })
+        .limit(3);
+      setRecentVisits((lastTxs as { id: number; created_at: string; points: number | null }[]) ?? []);
     };
-  }, [customerId]);
+
+    refetch();
+  }, [customerId, transactionUpdateVersion]);
 
   useEffect(() => {
     return () => {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { ClientRealtimeProvider } from "./ClientRealtimeContext";
 
 export default function ClientLayout({
   children,
@@ -78,6 +79,7 @@ export default function ClientLayout({
   }
 
   return (
+    <ClientRealtimeProvider>
     <div style={{ position: "relative", minHeight: "100vh" }}>
       <button
         type="button"
@@ -187,5 +189,6 @@ export default function ClientLayout({
 
       {children}
     </div>
+    </ClientRealtimeProvider>
   );
 }
