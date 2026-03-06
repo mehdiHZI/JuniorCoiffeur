@@ -132,6 +132,21 @@ export default function BarberLayout({
           >
             Réservation
           </button>
+          <button
+            type="button"
+            style={{
+              ...menuItemBase,
+              color: "#dc2626",
+              borderTop: "1px solid #e5e7eb",
+            }}
+            onClick={async () => {
+              setMenuOpen(false);
+              await supabase.auth.signOut();
+              router.push("/auth");
+            }}
+          >
+            Déconnexion
+          </button>
         </div>
       )}
 
