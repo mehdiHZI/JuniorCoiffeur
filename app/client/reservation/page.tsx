@@ -8,6 +8,13 @@ type Barber = { id: string; first_name: string | null; last_name: string | null 
 type Prestation = { id: number; title: string; image_url: string | null; price_eur: number; price_points: number };
 type Slot = { id: number; slot_date: string; start_time: string; end_time: string };
 
+function isSlotStartInFuture(slotDate: string, startTime: string): boolean {
+  const [y, m, d] = slotDate.split("-").map(Number);
+  const [h, min] = String(startTime).slice(0, 5).split(":").map(Number);
+  const slotStart = new Date(y, m - 1, d, h ?? 0, min ?? 0, 0, 0);
+  return slotStart.getTime() > Date.now();
+}
+
 type Summary = {
   barberName: string;
   prestationTitle: string;
@@ -112,8 +119,10 @@ export default function ClientReservationPage() {
         .in("slot_id", (allSlots ?? []).map((s: { id: number }) => s.id));
 
       const bookedIds = new Set((booked ?? []).map((b: { slot_id: number }) => b.slot_id));
-      const available = (allSlots ?? []).filter((s: { id: number }) => !bookedIds.has(s.id)) as Slot[];
-      setSlots(available);
+      const available = (allSlots ?? [])
+        .filter((s: { id: number }) => !bookedIds.has(s.id)) as Slot[];
+      const futureOnly = available.filter((s) => isSlotStartInFuture(s.slot_date, s.start_time));
+      setSlots(futureOnly);
       setLoadingSlots(false);
     };
     load();
@@ -134,7 +143,7 @@ export default function ClientReservationPage() {
     const load = async () => {
       const { data: allSlots } = await supabase
         .from("availability_slots")
-        .select("id, slot_date")
+        .select("id, slot_date, start_time")
         .eq("created_by", selectedBarber!.id)
         .gte("slot_date", startStr)
         .lte("slot_date", endStr)
@@ -151,14 +160,11 @@ export default function ClientReservationPage() {
         .in("slot_id", (allSlots as { id: number }[]).map((s) => s.id));
 
       const bookedIds = new Set((booked ?? []).map((b: { slot_id: number }) => b.slot_id));
-      const slotIdsByDate: Record<string, number[]> = {};
-      (allSlots as { id: number; slot_date: string }[]).forEach((s) => {
-        if (!slotIdsByDate[s.slot_date]) slotIdsByDate[s.slot_date] = [];
-        slotIdsByDate[s.slot_date].push(s.id);
-      });
       const withAvailability = new Set<string>();
-      Object.entries(slotIdsByDate).forEach(([date, ids]) => {
-        if (ids.some((id) => !bookedIds.has(id))) withAvailability.add(date);
+      (allSlots as { id: number; slot_date: string; start_time: string }[]).forEach((s) => {
+        if (bookedIds.has(s.id)) return;
+        if (!isSlotStartInFuture(s.slot_date, s.start_time)) return;
+        withAvailability.add(s.slot_date);
       });
       setDatesWithAvailability(withAvailability);
     };
