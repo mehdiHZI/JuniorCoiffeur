@@ -34,6 +34,7 @@ export default function ClientReservationPage() {
   const [booking, setBooking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [summaryPopup, setSummaryPopup] = useState<Summary | null>(null);
+  const [datesWithAvailability, setDatesWithAvailability] = useState<Set<string>>(new Set());
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const d = new Date();
     return { year: d.getFullYear(), month: d.getMonth() };
@@ -117,6 +118,52 @@ export default function ClientReservationPage() {
     };
     load();
   }, [selectedBarber, selectedDate]);
+
+  // Jours avec au moins un créneau dispo (pour le calendrier affiché + mois suivant)
+  useEffect(() => {
+    if (!selectedBarber) {
+      setDatesWithAvailability(new Set());
+      return;
+    }
+    const start = new Date(calendarMonth.year, calendarMonth.month, 1);
+    const end = new Date(calendarMonth.year, calendarMonth.month + 2, 0); // fin du mois suivant
+    const startStr = start.toISOString().slice(0, 10);
+    const endStr = end.toISOString().slice(0, 10);
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    const load = async () => {
+      const { data: allSlots } = await supabase
+        .from("availability_slots")
+        .select("id, slot_date")
+        .eq("created_by", selectedBarber!.id)
+        .gte("slot_date", startStr)
+        .lte("slot_date", endStr)
+        .gte("slot_date", todayStr);
+
+      if (!allSlots?.length) {
+        setDatesWithAvailability(new Set());
+        return;
+      }
+
+      const { data: booked } = await supabase
+        .from("bookings")
+        .select("slot_id")
+        .in("slot_id", (allSlots as { id: number }[]).map((s) => s.id));
+
+      const bookedIds = new Set((booked ?? []).map((b: { slot_id: number }) => b.slot_id));
+      const slotIdsByDate: Record<string, number[]> = {};
+      (allSlots as { id: number; slot_date: string }[]).forEach((s) => {
+        if (!slotIdsByDate[s.slot_date]) slotIdsByDate[s.slot_date] = [];
+        slotIdsByDate[s.slot_date].push(s.id);
+      });
+      const withAvailability = new Set<string>();
+      Object.entries(slotIdsByDate).forEach(([date, ids]) => {
+        if (ids.some((id) => !bookedIds.has(id))) withAvailability.add(date);
+      });
+      setDatesWithAvailability(withAvailability);
+    };
+    load();
+  }, [selectedBarber, calendarMonth.year, calendarMonth.month]);
 
   const handleBook = async (slot: Slot) => {
     if (!customerId || !selectedBarber || !selectedPrestation) return;
@@ -339,6 +386,7 @@ export default function ClientReservationPage() {
                 const dateStr = `${calendarMonth.year}-${String(calendarMonth.month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
                 const isPast = dateStr < today;
                 const isSelected = selectedDate === dateStr;
+                const hasAvailability = !isPast && datesWithAvailability.has(dateStr);
                 return (
                   <button
                     key={dateStr}
@@ -353,9 +401,25 @@ export default function ClientReservationPage() {
                       color: isPast ? "#9ca3af" : "#111",
                       cursor: isPast ? "not-allowed" : "pointer",
                       fontSize: "14px",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "4px",
                     }}
                   >
-                    {d}
+                    <span>{d}</span>
+                    {hasAvailability && (
+                      <span
+                        style={{
+                          width: "6px",
+                          height: "6px",
+                          borderRadius: "50%",
+                          backgroundColor: "#16a34a",
+                          flexShrink: 0,
+                        }}
+                        title="Créneaux disponibles"
+                      />
+                    )}
                   </button>
                 );
               })}
