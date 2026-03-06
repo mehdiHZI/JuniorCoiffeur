@@ -5,6 +5,16 @@ import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 
 const FEED_EMOJIS = ["👍", "❤️", "😂", "😮", "😢"];
+const SEEN_CANCELLATIONS_KEY = "chriscut_seen_cancellation_ids";
+
+type CancellationItem = {
+  id: number;
+  cancelled_at: string;
+  cancel_reason: string | null;
+  slot_date: string;
+  start_time: string;
+  end_time: string;
+};
 
 export default function ClientHomePage() {
   const router = useRouter();
@@ -29,9 +39,7 @@ export default function ClientHomePage() {
   const [bookings, setBookings] = useState<
     { id: number; slot_id: number; slot_date: string; start_time: string; end_time: string }[]
   >([]);
-  const [cancellations, setCancellations] = useState<
-    { id: number; cancelled_at: string; cancel_reason: string | null; slot_date: string; start_time: string; end_time: string }[]
-  >([]);
+  const [popupCancellations, setPopupCancellations] = useState<CancellationItem[]>([]);
 
   useEffect(() => {
     const run = async () => {
@@ -186,8 +194,15 @@ export default function ClientHomePage() {
           start_time: slot.start_time,
           end_time: slot.end_time,
         };
-      }).filter(Boolean) as { id: number; cancelled_at: string; cancel_reason: string | null; slot_date: string; start_time: string; end_time: string }[];
-      setCancellations(cancellationsList);
+      }).filter(Boolean) as CancellationItem[];
+      try {
+        const seenRaw = typeof window !== "undefined" ? window.localStorage.getItem(SEEN_CANCELLATIONS_KEY) : null;
+        const seenIds: number[] = seenRaw ? JSON.parse(seenRaw) : [];
+        const unseen = cancellationsList.filter((c) => !seenIds.includes(c.id));
+        if (unseen.length > 0) setPopupCancellations(unseen);
+      } catch {
+        if (cancellationsList.length > 0) setPopupCancellations(cancellationsList);
+      }
 
       setLoading(false);
     };
@@ -333,6 +348,19 @@ export default function ClientHomePage() {
     if (!error) setBookings((prev) => prev.filter((b) => b.id !== bookingId));
   };
 
+  const dismissCancellationPopup = () => {
+    if (popupCancellations.length === 0) return;
+    try {
+      const raw = typeof window !== "undefined" ? window.localStorage.getItem(SEEN_CANCELLATIONS_KEY) : null;
+      const seen: number[] = raw ? JSON.parse(raw) : [];
+      const merged = [...new Set([...seen, ...popupCancellations.map((c) => c.id)])];
+      if (typeof window !== "undefined") window.localStorage.setItem(SEEN_CANCELLATIONS_KEY, JSON.stringify(merged));
+    } catch {
+      // ignore
+    }
+    setPopupCancellations([]);
+  };
+
   const handleAvatarChange = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -398,6 +426,80 @@ export default function ClientHomePage() {
 
   return (
     <div style={containerStyle}>
+      {popupCancellations.length > 0 && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+            padding: "20px",
+          }}
+          onClick={dismissCancellationPopup}
+        >
+          <div
+            style={{
+              backgroundColor: "#fff",
+              borderRadius: "16px",
+              padding: "24px",
+              maxWidth: "400px",
+              width: "100%",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ fontSize: "18px", fontWeight: 600, marginBottom: "12px", color: "#111" }}>
+              Rendez-vous annulé(s)
+            </h3>
+            <p style={{ fontSize: "14px", color: "#374151", marginBottom: "16px" }}>
+              Le salon a annulé le(s) rendez-vous suivant(s) :
+            </p>
+            <ul style={{ listStyle: "none", padding: 0, margin: 0, marginBottom: "20px" }}>
+              {popupCancellations.map((c) => (
+                <li key={c.id} style={{ padding: "8px 0", borderBottom: "1px solid #e5e7eb" }}>
+                  <span style={{ fontSize: "14px", color: "#111", display: "block" }}>
+                    {(() => {
+                      const [y, m, d] = c.slot_date.split("-").map(Number);
+                      return new Date(y, m - 1, d).toLocaleDateString("fr-FR", {
+                        weekday: "short",
+                        day: "2-digit",
+                        month: "short",
+                      });
+                    })()}{" "}
+                    {String(c.start_time).slice(0, 5)} – {String(c.end_time).slice(0, 5)}
+                  </span>
+                  {c.cancel_reason && (
+                    <span style={{ fontSize: "13px", color: "#6b7280", display: "block", marginTop: "4px", fontStyle: "italic" }}>
+                      Motif : {c.cancel_reason}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              onClick={dismissCancellationPopup}
+              style={{
+                width: "100%",
+                padding: "12px",
+                borderRadius: "10px",
+                border: "none",
+                backgroundColor: "#111",
+                color: "#fff",
+                fontSize: "15px",
+                fontWeight: 500,
+                cursor: "pointer",
+              }}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
       <div style={cardStyle}>
         <h1
           style={{
@@ -543,49 +645,6 @@ export default function ClientHomePage() {
                   >
                     Annuler
                   </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {cancellations.length > 0 && (
-          <div style={{ marginTop: "20px" }}>
-            <h2
-              style={{
-                fontSize: "16px",
-                fontWeight: 600,
-                marginBottom: "8px",
-                color: "#111",
-              }}
-            >
-              Réservations annulées par le salon
-            </h2>
-            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-              {cancellations.map((c) => (
-                <li
-                  key={c.id}
-                  style={{
-                    padding: "10px 0",
-                    borderBottom: "1px solid #e5e7eb",
-                  }}
-                >
-                  <span style={{ fontSize: "14px", color: "#4b5563", display: "block" }}>
-                    {(() => {
-                      const [y, m, d] = c.slot_date.split("-").map(Number);
-                      return new Date(y, m - 1, d).toLocaleDateString("fr-FR", {
-                        weekday: "short",
-                        day: "2-digit",
-                        month: "short",
-                      });
-                    })()}{" "}
-                    {String(c.start_time).slice(0, 5)} – {String(c.end_time).slice(0, 5)}
-                  </span>
-                  {c.cancel_reason && (
-                    <span style={{ fontSize: "13px", color: "#6b7280", display: "block", marginTop: "4px", fontStyle: "italic" }}>
-                      Motif : {c.cancel_reason}
-                    </span>
-                  )}
                 </li>
               ))}
             </ul>
