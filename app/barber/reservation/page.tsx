@@ -36,6 +36,7 @@ type Slot = {
   start_time: string;
   end_time: string;
   created_at: string;
+  address: string | null;
 };
 
 export default function BarberReservationPage() {
@@ -47,6 +48,7 @@ export default function BarberReservationPage() {
   const [slotDate, setSlotDate] = useState("");
   const [startTime, setStartTime] = useState("08:00");
   const [endTime, setEndTime] = useState("12:00");
+  const [address, setAddress] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cancelModalSlotId, setCancelModalSlotId] = useState<number | null>(null);
@@ -58,7 +60,7 @@ export default function BarberReservationPage() {
     if (!authData.user) return;
     const { data, error: err } = await supabase
       .from("availability_slots")
-      .select("id, slot_date, start_time, end_time, created_at")
+      .select("id, slot_date, start_time, end_time, created_at, address")
       .eq("created_by", authData.user.id)
       .gte("slot_date", new Date().toISOString().slice(0, 10))
       .order("slot_date", { ascending: true })
@@ -169,11 +171,13 @@ export default function BarberReservationPage() {
     if (!authData.user) return;
     setSaving(true);
     setError(null);
+    const addr = address.trim() || null;
     const rows = generated.map(({ start, end }) => ({
       slot_date: slotDate,
       start_time: start,
       end_time: end,
       created_by: authData.user!.id,
+      address: addr,
     }));
     const { error: err } = await supabase.from("availability_slots").insert(rows);
     if (err) {
@@ -184,6 +188,7 @@ export default function BarberReservationPage() {
     setSlotDate("");
     setStartTime("08:00");
     setEndTime("12:00");
+    setAddress("");
     await loadSlots();
     setSaving(false);
   };
@@ -310,8 +315,25 @@ export default function BarberReservationPage() {
             padding: "10px 12px",
             borderRadius: "10px",
             border: "1px solid #d1d5db",
+            marginBottom: "12px",
+            fontSize: "14px",
+          }}
+        />
+        <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "4px", color: "#374151" }}>Adresse du RDV (optionnel)</label>
+        <textarea
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          placeholder="Ex. 12 rue de la Paix, 75002 Paris"
+          rows={2}
+          style={{
+            width: "100%",
+            boxSizing: "border-box",
+            padding: "10px 12px",
+            borderRadius: "10px",
+            border: "1px solid #d1d5db",
             marginBottom: "16px",
             fontSize: "14px",
+            resize: "vertical",
           }}
         />
         <button

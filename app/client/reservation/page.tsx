@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 
-type Barber = { id: string; first_name: string | null; last_name: string | null; address: string | null };
+type Barber = { id: string; first_name: string | null; last_name: string | null };
 type Prestation = { id: number; title: string; image_url: string | null; price_eur: number; price_points: number };
-type Slot = { id: number; slot_date: string; start_time: string; end_time: string };
+type Slot = { id: number; slot_date: string; start_time: string; end_time: string; address: string | null };
 
 function isSlotStartInFuture(slotDate: string, startTime: string): boolean {
   const [y, m, d] = slotDate.split("-").map(Number);
@@ -69,13 +69,12 @@ export default function ClientReservationPage() {
 
       const { data: barberProfiles } = await supabase
         .from("profiles")
-        .select("id, first_name, last_name, address")
+        .select("id, first_name, last_name")
         .eq("role", "barber");
       const list = (barberProfiles ?? []).map((p) => ({
         id: (p as { id: string }).id,
         first_name: (p as { first_name: string | null }).first_name,
         last_name: (p as { last_name: string | null }).last_name,
-        address: (p as { address: string | null }).address ?? null,
       }));
       setBarbers(list);
       setLoading(false);
@@ -110,7 +109,7 @@ export default function ClientReservationPage() {
       setLoadingSlots(true);
       const { data: allSlots } = await supabase
         .from("availability_slots")
-        .select("id, slot_date, start_time, end_time")
+        .select("id, slot_date, start_time, end_time, address")
         .eq("created_by", selectedBarber.id)
         .eq("slot_date", selectedDate)
         .gte("slot_date", new Date().toISOString().slice(0, 10))
@@ -197,7 +196,7 @@ export default function ClientReservationPage() {
       endTime: slot.end_time,
       priceEur: Number(selectedPrestation.price_eur),
       pricePoints: selectedPrestation.price_points,
-      address: selectedBarber.address ?? null,
+      address: slot.address ?? null,
     });
     setSlots((prev) => prev.filter((s) => s.id !== slot.id));
     setBooking(false);
@@ -546,9 +545,9 @@ export default function ClientReservationPage() {
               <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
                 <strong>Tarif :</strong> {Number(selectedPrestation.price_eur)} € — {selectedPrestation.price_points} points
               </li>
-              {selectedBarber.address?.trim() && (
+              {confirmSlot.address?.trim() && (
                 <li style={{ padding: "6px 0" }}>
-                  <strong>Adresse :</strong> {selectedBarber.address.trim()}
+                  <strong>Adresse :</strong> {confirmSlot.address.trim()}
                 </li>
               )}
             </ul>
