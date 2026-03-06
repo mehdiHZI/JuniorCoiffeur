@@ -42,12 +42,16 @@ export default function BarberReservationPage() {
   const router = useRouter();
   const [slots, setSlots] = useState<Slot[]>([]);
   const [bookingClientInfo, setBookingClientInfo] = useState<Record<number, { name: string; phone: string }>>({});
+  const [bookingCustomerIds, setBookingCustomerIds] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [slotDate, setSlotDate] = useState("");
   const [startTime, setStartTime] = useState("08:00");
   const [endTime, setEndTime] = useState("12:00");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cancelModalSlotId, setCancelModalSlotId] = useState<number | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
 
   const loadSlots = async () => {
     const { data: authData } = await supabase.auth.getUser();
@@ -69,6 +73,7 @@ export default function BarberReservationPage() {
 
     if (slotList.length === 0) {
       setBookingClientInfo({});
+      setBookingCustomerIds({});
       return;
     }
     const slotIds = slotList.map((s) => s.id);
@@ -78,6 +83,7 @@ export default function BarberReservationPage() {
       .in("slot_id", slotIds);
     if (!bookings?.length) {
       setBookingClientInfo({});
+      setBookingCustomerIds({});
       return;
     }
     const customerIds = [...new Set((bookings as { customer_id: string }[]).map((b) => b.customer_id))];
@@ -90,6 +96,7 @@ export default function BarberReservationPage() {
       .filter(Boolean);
     if (userIds.length === 0) {
       setBookingClientInfo({});
+      setBookingCustomerIds({});
       return;
     }
     const { data: profiles } = await supabase
@@ -112,11 +119,14 @@ export default function BarberReservationPage() {
       customerToUser[cid] = uid;
     });
     const slotToInfo: Record<number, { name: string; phone: string }> = {};
+    const slotToCustomerId: Record<number, string> = {};
     (bookings as { slot_id: number; customer_id: string }[]).forEach((b) => {
       const info = userToInfo[customerToUser[b.customer_id]];
       if (info) slotToInfo[b.slot_id] = info;
+      slotToCustomerId[b.slot_id] = b.customer_id;
     });
     setBookingClientInfo(slotToInfo);
+    setBookingCustomerIds(slotToCustomerId);
   };
 
   useEffect(() => {
@@ -186,6 +196,41 @@ export default function BarberReservationPage() {
     }
     const { error: err } = await supabase.from("availability_slots").delete().eq("id", id);
     if (!err) setSlots((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const handleCancelReservation = async () => {
+    if (cancelModalSlotId == null) return;
+    const customerId = bookingCustomerIds[cancelModalSlotId];
+    if (!customerId) {
+      setError("Client introuvable.");
+      setCancelling(false);
+      return;
+    }
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) return;
+    setCancelling(true);
+    setError(null);
+    const { error: insertErr } = await supabase.from("booking_cancellations").insert({
+      slot_id: cancelModalSlotId,
+      customer_id: customerId,
+      cancel_reason: cancelReason.trim() || null,
+      cancelled_by: authData.user.id,
+    });
+    if (insertErr) {
+      setError(insertErr.message);
+      setCancelling(false);
+      return;
+    }
+    const { error: deleteErr } = await supabase.from("bookings").delete().eq("slot_id", cancelModalSlotId);
+    if (deleteErr) {
+      setError(deleteErr.message);
+      setCancelling(false);
+      return;
+    }
+    setCancelModalSlotId(null);
+    setCancelReason("");
+    await loadSlots();
+    setCancelling(false);
   };
 
   const containerStyle: React.CSSProperties = {
@@ -316,13 +361,25 @@ export default function BarberReservationPage() {
                     })()}{" "}
                     {String(s.start_time).slice(0, 5)} – {String(s.end_time).slice(0, 5)}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(s.id)}
-                    style={{ fontSize: "12px", color: "#dc2626", background: "none", border: "none", cursor: "pointer" }}
-                  >
-                    Supprimer
-                  </button>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    {bookingClientInfo[s.id] ? (
+                      <button
+                        type="button"
+                        onClick={() => { setCancelModalSlotId(s.id); setCancelReason(""); setError(null); }}
+                        style={{ fontSize: "12px", color: "#dc2626", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}
+                      >
+                        Annuler la réservation
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(s.id)}
+                        style={{ fontSize: "12px", color: "#dc2626", background: "none", border: "none", cursor: "pointer" }}
+                      >
+                        Supprimer
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {bookingClientInfo[s.id] && (
                   <span style={{ fontSize: "13px", color: "#4b5563", display: "block", marginTop: "4px" }}>
@@ -335,6 +392,92 @@ export default function BarberReservationPage() {
               </li>
             ))}
           </ul>
+        )}
+
+        {cancelModalSlotId != null && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              backgroundColor: "rgba(0,0,0,0.4)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 50,
+              padding: "16px",
+            }}
+            onClick={() => !cancelling && setCancelModalSlotId(null)}
+          >
+            <div
+              style={{
+                backgroundColor: "#fff",
+                borderRadius: "16px",
+                padding: "24px",
+                maxWidth: "400px",
+                width: "100%",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 style={{ fontSize: "18px", fontWeight: 600, marginBottom: "8px", color: "#111" }}>
+                Annuler la réservation
+              </h3>
+              <p style={{ fontSize: "14px", color: "#4b5563", marginBottom: "12px" }}>
+                Le motif sera envoyé au client.
+              </p>
+              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "4px", color: "#374151" }}>
+                Motif (optionnel)
+              </label>
+              <textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Ex. imprévu, fermeture exceptionnelle..."
+                rows={3}
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  padding: "10px 12px",
+                  borderRadius: "10px",
+                  border: "1px solid #d1d5db",
+                  marginBottom: "16px",
+                  fontSize: "14px",
+                  resize: "vertical",
+                }}
+              />
+              <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => !cancelling && setCancelModalSlotId(null)}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: "10px",
+                    border: "1px solid #d1d5db",
+                    background: "#fff",
+                    fontSize: "14px",
+                    cursor: cancelling ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Retour
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelReservation}
+                  disabled={cancelling}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: "10px",
+                    border: "none",
+                    background: "#dc2626",
+                    color: "#fff",
+                    fontSize: "14px",
+                    cursor: cancelling ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {cancelling ? "Annulation..." : "Confirmer l'annulation"}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

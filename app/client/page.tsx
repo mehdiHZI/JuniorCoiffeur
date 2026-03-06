@@ -29,6 +29,9 @@ export default function ClientHomePage() {
   const [bookings, setBookings] = useState<
     { id: number; slot_id: number; slot_date: string; start_time: string; end_time: string }[]
   >([]);
+  const [cancellations, setCancellations] = useState<
+    { id: number; cancelled_at: string; cancel_reason: string | null; slot_date: string; start_time: string; end_time: string }[]
+  >([]);
 
   useEffect(() => {
     const run = async () => {
@@ -164,6 +167,27 @@ export default function ClientHomePage() {
       }).filter(Boolean) as { id: number; slot_id: number; slot_date: string; start_time: string; end_time: string }[];
       const upcoming = withSlots.filter((b) => b.slot_date >= today).sort((a, b) => a.slot_date.localeCompare(b.slot_date) || String(a.start_time).localeCompare(String(b.start_time)));
       setBookings(upcoming);
+
+      const { data: cancellationsData } = await supabase
+        .from("booking_cancellations")
+        .select("id, cancelled_at, cancel_reason, availability_slots(slot_date, start_time, end_time)")
+        .eq("customer_id", customer.id)
+        .order("cancelled_at", { ascending: false })
+        .limit(10);
+      const cancellationsList = (cancellationsData ?? []).map((c: { id: number; cancelled_at: string; cancel_reason: string | null; availability_slots: { slot_date: string; start_time: string; end_time: string } | { slot_date: string; start_time: string; end_time: string }[] | null }) => {
+        const raw = c.availability_slots;
+        const slot = Array.isArray(raw) ? raw[0] : raw;
+        if (!slot) return null;
+        return {
+          id: c.id,
+          cancelled_at: c.cancelled_at,
+          cancel_reason: c.cancel_reason,
+          slot_date: slot.slot_date,
+          start_time: slot.start_time,
+          end_time: slot.end_time,
+        };
+      }).filter(Boolean) as { id: number; cancelled_at: string; cancel_reason: string | null; slot_date: string; start_time: string; end_time: string }[];
+      setCancellations(cancellationsList);
 
       setLoading(false);
     };
@@ -519,6 +543,49 @@ export default function ClientHomePage() {
                   >
                     Annuler
                   </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {cancellations.length > 0 && (
+          <div style={{ marginTop: "20px" }}>
+            <h2
+              style={{
+                fontSize: "16px",
+                fontWeight: 600,
+                marginBottom: "8px",
+                color: "#111",
+              }}
+            >
+              Réservations annulées par le salon
+            </h2>
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              {cancellations.map((c) => (
+                <li
+                  key={c.id}
+                  style={{
+                    padding: "10px 0",
+                    borderBottom: "1px solid #e5e7eb",
+                  }}
+                >
+                  <span style={{ fontSize: "14px", color: "#4b5563", display: "block" }}>
+                    {(() => {
+                      const [y, m, d] = c.slot_date.split("-").map(Number);
+                      return new Date(y, m - 1, d).toLocaleDateString("fr-FR", {
+                        weekday: "short",
+                        day: "2-digit",
+                        month: "short",
+                      });
+                    })()}{" "}
+                    {String(c.start_time).slice(0, 5)} – {String(c.end_time).slice(0, 5)}
+                  </span>
+                  {c.cancel_reason && (
+                    <span style={{ fontSize: "13px", color: "#6b7280", display: "block", marginTop: "4px", fontStyle: "italic" }}>
+                      Motif : {c.cancel_reason}
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
