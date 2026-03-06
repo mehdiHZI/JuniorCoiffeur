@@ -40,6 +40,14 @@ export default function ClientHomePage() {
     { id: number; slot_id: number; slot_date: string; start_time: string; end_time: string }[]
   >([]);
   const [popupCancellations, setPopupCancellations] = useState<CancellationItem[]>([]);
+  const [cancelConfirmBooking, setCancelConfirmBooking] = useState<{
+    id: number;
+    slot_id: number;
+    slot_date: string;
+    start_time: string;
+    end_time: string;
+  } | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     const run = async () => {
@@ -354,6 +362,14 @@ export default function ClientHomePage() {
     return 50;
   };
 
+  const confirmCancelBooking = async () => {
+    if (!cancelConfirmBooking) return;
+    setCancelling(true);
+    await cancelBooking(cancelConfirmBooking);
+    setCancelConfirmBooking(null);
+    setCancelling(false);
+  };
+
   const cancelBooking = async (booking: { id: number; slot_id: number; slot_date: string; start_time: string; end_time: string }) => {
     const penalty = getCancellationPenalty(booking.slot_date, booking.start_time);
     if (penalty > 0 && customerId) {
@@ -665,7 +681,7 @@ export default function ClientHomePage() {
                   </span>
                   <button
                     type="button"
-                    onClick={() => cancelBooking(b)}
+                    onClick={() => setCancelConfirmBooking(b)}
                     style={{
                       fontSize: "12px",
                       color: "#dc2626",
@@ -680,6 +696,92 @@ export default function ClientHomePage() {
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {cancelConfirmBooking && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              backgroundColor: "rgba(0,0,0,0.5)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 100,
+              padding: "20px",
+            }}
+            onClick={() => !cancelling && setCancelConfirmBooking(null)}
+          >
+            <div
+              style={{
+                backgroundColor: "#fff",
+                borderRadius: "16px",
+                padding: "24px",
+                maxWidth: "380px",
+                width: "100%",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 style={{ fontSize: "18px", fontWeight: 600, marginBottom: "12px", color: "#111" }}>
+                Êtes-vous sûr d&apos;annuler ?
+              </h3>
+              <p style={{ fontSize: "14px", color: "#374151", marginBottom: "8px" }}>
+                Votre réservation du{" "}
+                {(() => {
+                  const [y, m, d] = cancelConfirmBooking.slot_date.split("-").map(Number);
+                  return new Date(y, m - 1, d).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" });
+                })()}{" "}
+                à {String(cancelConfirmBooking.start_time).slice(0, 5)} sera supprimée.
+              </p>
+              {getCancellationPenalty(cancelConfirmBooking.slot_date, cancelConfirmBooking.start_time) > 0 ? (
+                <p style={{ fontSize: "14px", color: "#dc2626", fontWeight: 500, marginBottom: "20px" }}>
+                  Attention : une annulation à moins de 48h du rendez-vous entraîne une pénalité de{" "}
+                  {getCancellationPenalty(cancelConfirmBooking.slot_date, cancelConfirmBooking.start_time)} points
+                  {getCancellationPenalty(cancelConfirmBooking.slot_date, cancelConfirmBooking.start_time) === 50
+                    ? " (moins de 24h avant)."
+                    : " (entre 24h et 48h avant)."}
+                </p>
+              ) : (
+                <p style={{ fontSize: "14px", color: "#16a34a", marginBottom: "20px" }}>
+                  Aucune pénalité (annulation plus de 48h avant le RDV).
+                </p>
+              )}
+              <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => !cancelling && setCancelConfirmBooking(null)}
+                  style={{
+                    padding: "10px 18px",
+                    borderRadius: "10px",
+                    border: "1px solid #d1d5db",
+                    background: "#fff",
+                    fontSize: "14px",
+                    cursor: cancelling ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Non
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmCancelBooking}
+                  disabled={cancelling}
+                  style={{
+                    padding: "10px 18px",
+                    borderRadius: "10px",
+                    border: "none",
+                    background: "#dc2626",
+                    color: "#fff",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    cursor: cancelling ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {cancelling ? "Annulation..." : "Oui, annuler"}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
