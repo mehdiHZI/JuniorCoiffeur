@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 
-type Barber = { id: string; first_name: string | null; last_name: string | null };
+type Barber = { id: string; first_name: string | null; last_name: string | null; address: string | null };
 type Prestation = { id: number; title: string; image_url: string | null; price_eur: number; price_points: number };
 type Slot = { id: number; slot_date: string; start_time: string; end_time: string };
 
@@ -23,6 +23,7 @@ type Summary = {
   endTime: string;
   priceEur: number;
   pricePoints: number;
+  address: string | null;
 };
 
 export default function ClientReservationPage() {
@@ -40,6 +41,7 @@ export default function ClientReservationPage() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [booking, setBooking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [confirmSlot, setConfirmSlot] = useState<Slot | null>(null);
   const [summaryPopup, setSummaryPopup] = useState<Summary | null>(null);
   const [datesWithAvailability, setDatesWithAvailability] = useState<Set<string>>(new Set());
   const [calendarMonth, setCalendarMonth] = useState(() => {
@@ -67,12 +69,13 @@ export default function ClientReservationPage() {
 
       const { data: barberProfiles } = await supabase
         .from("profiles")
-        .select("id, first_name, last_name")
+        .select("id, first_name, last_name, address")
         .eq("role", "barber");
       const list = (barberProfiles ?? []).map((p) => ({
         id: (p as { id: string }).id,
         first_name: (p as { first_name: string | null }).first_name,
         last_name: (p as { last_name: string | null }).last_name,
+        address: (p as { address: string | null }).address ?? null,
       }));
       setBarbers(list);
       setLoading(false);
@@ -194,6 +197,7 @@ export default function ClientReservationPage() {
       endTime: slot.end_time,
       priceEur: Number(selectedPrestation.price_eur),
       pricePoints: selectedPrestation.price_points,
+      address: selectedBarber.address ?? null,
     });
     setSlots((prev) => prev.filter((s) => s.id !== slot.id));
     setBooking(false);
@@ -461,7 +465,7 @@ export default function ClientReservationPage() {
                         </span>
                         <button
                           type="button"
-                          onClick={() => handleBook(s)}
+                          onClick={() => setConfirmSlot(s)}
                           disabled={booking}
                           style={{
                             padding: "8px 16px",
@@ -491,6 +495,103 @@ export default function ClientReservationPage() {
           </div>
         )}
       </div>
+
+      {/* Modal confirmation avant réservation */}
+      {confirmSlot && selectedBarber && selectedPrestation && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+            padding: "20px",
+          }}
+          onClick={() => !booking && setConfirmSlot(null)}
+        >
+          <div
+            style={{
+              backgroundColor: "#fff",
+              borderRadius: "16px",
+              padding: "28px 24px",
+              maxWidth: "400px",
+              width: "100%",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ fontSize: "18px", fontWeight: 600, marginBottom: "16px", color: "#111" }}>
+              Confirmer la réservation
+            </h3>
+            <p style={{ fontSize: "14px", color: "#4b5563", marginBottom: "16px" }}>
+              Récapitulatif de ta commande :
+            </p>
+            <ul style={{ listStyle: "none", padding: 0, margin: 0, marginBottom: "24px", fontSize: "14px", color: "#374151" }}>
+              <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
+                <strong>Coiffeur :</strong> {`${selectedBarber.first_name ?? ""} ${selectedBarber.last_name ?? ""}`.trim() || "Coiffeur"}
+              </li>
+              <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
+                <strong>Prestation :</strong> {selectedPrestation.title}
+              </li>
+              <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
+                <strong>Date :</strong>{" "}
+                {(() => {
+                  const [y, m, d] = confirmSlot.slot_date.split("-").map(Number);
+                  return new Date(y, m - 1, d).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+                })()}{" "}
+                {String(confirmSlot.start_time).slice(0, 5)} – {String(confirmSlot.end_time).slice(0, 5)}
+              </li>
+              <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
+                <strong>Tarif :</strong> {Number(selectedPrestation.price_eur)} € — {selectedPrestation.price_points} points
+              </li>
+              {selectedBarber.address?.trim() && (
+                <li style={{ padding: "6px 0" }}>
+                  <strong>Adresse :</strong> {selectedBarber.address.trim()}
+                </li>
+              )}
+            </ul>
+            <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => !booking && setConfirmSlot(null)}
+                disabled={booking}
+                style={{
+                  padding: "10px 18px",
+                  borderRadius: "10px",
+                  border: "1px solid #d1d5db",
+                  background: "#fff",
+                  fontSize: "14px",
+                  cursor: booking ? "not-allowed" : "pointer",
+                }}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await handleBook(confirmSlot);
+                  setConfirmSlot(null);
+                }}
+                disabled={booking}
+                style={{
+                  padding: "10px 18px",
+                  borderRadius: "10px",
+                  border: "none",
+                  background: "#111",
+                  color: "#fff",
+                  fontSize: "14px",
+                  fontWeight: 500,
+                  cursor: booking ? "not-allowed" : "pointer",
+                }}
+              >
+                {booking ? "Réservation..." : "Confirmer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Popup remerciement après réservation */}
       {summaryPopup && (
@@ -535,9 +636,14 @@ export default function ClientReservationPage() {
                 })()}{" "}
                 {String(summaryPopup.startTime).slice(0, 5)} – {String(summaryPopup.endTime).slice(0, 5)}
               </li>
-              <li style={{ padding: "6px 0" }}>
+              <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
                 <strong>Tarif :</strong> {summaryPopup.priceEur} € — {summaryPopup.pricePoints} points
               </li>
+              {summaryPopup.address?.trim() && (
+                <li style={{ padding: "6px 0" }}>
+                  <strong>Adresse :</strong> {summaryPopup.address.trim()}
+                </li>
+              )}
             </ul>
             <button
               type="button"

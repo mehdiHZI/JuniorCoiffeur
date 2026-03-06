@@ -146,6 +146,16 @@ export default function BarberLayout({
             type="button"
             style={{
               ...menuItemBase,
+              ...(pathname.startsWith("/barber/parametres") ? activeItemExtra : {}),
+            }}
+            onClick={() => nav("/barber/parametres")}
+          >
+            Paramètres
+          </button>
+          <button
+            type="button"
+            style={{
+              ...menuItemBase,
               color: "#dc2626",
               borderTop: "1px solid #e5e7eb",
             }}
