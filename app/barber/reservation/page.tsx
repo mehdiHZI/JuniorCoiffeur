@@ -41,7 +41,7 @@ type Slot = {
 export default function BarberReservationPage() {
   const router = useRouter();
   const [slots, setSlots] = useState<Slot[]>([]);
-  const [bookingEmails, setBookingEmails] = useState<Record<number, string>>({});
+  const [bookingClientInfo, setBookingClientInfo] = useState<Record<number, { name: string; phone: string }>>({});
   const [loading, setLoading] = useState(true);
   const [slotDate, setSlotDate] = useState("");
   const [startTime, setStartTime] = useState("08:00");
@@ -68,7 +68,7 @@ export default function BarberReservationPage() {
     setSlots(slotList);
 
     if (slotList.length === 0) {
-      setBookingEmails({});
+      setBookingClientInfo({});
       return;
     }
     const slotIds = slotList.map((s) => s.id);
@@ -77,7 +77,7 @@ export default function BarberReservationPage() {
       .select("slot_id, customer_id")
       .in("slot_id", slotIds);
     if (!bookings?.length) {
-      setBookingEmails({});
+      setBookingClientInfo({});
       return;
     }
     const customerIds = [...new Set((bookings as { customer_id: string }[]).map((b) => b.customer_id))];
@@ -89,18 +89,21 @@ export default function BarberReservationPage() {
       .map((c) => (c as { user_id: string }).user_id)
       .filter(Boolean);
     if (userIds.length === 0) {
-      setBookingEmails({});
+      setBookingClientInfo({});
       return;
     }
     const { data: profiles } = await supabase
       .from("profiles")
-      .select("id, email")
+      .select("id, first_name, last_name, phone")
       .in("id", userIds);
-    const userToEmail: Record<string, string> = {};
+    const userToInfo: Record<string, { name: string; phone: string }> = {};
     (profiles ?? []).forEach((p) => {
-      const pid = (p as { id: string; email: string | null }).id;
-      const email = (p as { id: string; email: string | null }).email ?? "";
-      userToEmail[pid] = email;
+      const pid = (p as { id: string; first_name: string | null; last_name: string | null; phone: string | null }).id;
+      const fn = (p as { first_name: string | null }).first_name ?? "";
+      const ln = (p as { last_name: string | null }).last_name ?? "";
+      const name = `${fn} ${ln}`.trim() || "Client";
+      const phone = (p as { phone: string | null }).phone ?? "";
+      userToInfo[pid] = { name, phone };
     });
     const customerToUser: Record<string, string> = {};
     (customers ?? []).forEach((c) => {
@@ -108,12 +111,12 @@ export default function BarberReservationPage() {
       const uid = (c as { id: string; user_id: string }).user_id;
       customerToUser[cid] = uid;
     });
-    const slotToEmail: Record<number, string> = {};
+    const slotToInfo: Record<number, { name: string; phone: string }> = {};
     (bookings as { slot_id: number; customer_id: string }[]).forEach((b) => {
-      const email = userToEmail[customerToUser[b.customer_id]];
-      if (email) slotToEmail[b.slot_id] = email;
+      const info = userToInfo[customerToUser[b.customer_id]];
+      if (info) slotToInfo[b.slot_id] = info;
     });
-    setBookingEmails(slotToEmail);
+    setBookingClientInfo(slotToInfo);
   };
 
   useEffect(() => {
@@ -321,9 +324,12 @@ export default function BarberReservationPage() {
                     Supprimer
                   </button>
                 </div>
-                {bookingEmails[s.id] && (
-                  <span style={{ fontSize: "13px", color: "#4b5563" }} title="Réservé par">
-                    Réservé par : {bookingEmails[s.id]}
+                {bookingClientInfo[s.id] && (
+                  <span style={{ fontSize: "13px", color: "#4b5563", display: "block", marginTop: "4px" }}>
+                    Réservé par : {bookingClientInfo[s.id].name}
+                    {bookingClientInfo[s.id].phone && (
+                      <> — {bookingClientInfo[s.id].phone}</>
+                    )}
                   </span>
                 )}
               </li>
