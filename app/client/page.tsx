@@ -343,9 +343,41 @@ export default function ClientHomePage() {
     }));
   };
 
-  const cancelBooking = async (bookingId: number) => {
-    const { error } = await supabase.from("bookings").delete().eq("id", bookingId);
-    if (!error) setBookings((prev) => prev.filter((b) => b.id !== bookingId));
+  const getCancellationPenalty = (slotDate: string, startTime: string): number => {
+    const [y, m, d] = slotDate.split("-").map(Number);
+    const [h, min] = String(startTime).slice(0, 5).split(":").map(Number);
+    const appointment = new Date(y, m - 1, d, h ?? 0, min ?? 0, 0, 0);
+    const now = new Date();
+    const hoursUntil = (appointment.getTime() - now.getTime()) / (1000 * 60 * 60);
+    if (hoursUntil >= 48) return 0;
+    if (hoursUntil >= 24) return 10;
+    return 50;
+  };
+
+  const cancelBooking = async (booking: { id: number; slot_id: number; slot_date: string; start_time: string; end_time: string }) => {
+    const penalty = getCancellationPenalty(booking.slot_date, booking.start_time);
+    if (penalty > 0 && customerId) {
+      const { error: txErr } = await supabase.from("transactions").insert({
+        customer_id: customerId,
+        points: -penalty,
+        barber_user_id: null,
+        shop_item_id: null,
+      });
+      if (txErr) {
+        setPointsNotification("Erreur lors de l'application de la pénalité. Annulation impossible.");
+        setTimeout(() => setPointsNotification(null), 4000);
+        return;
+      }
+      setPoints((prev) => prev - penalty);
+      setPointsNotification(
+        penalty === 10
+          ? "Réservation annulée. Pénalité de 10 points (annulation entre 24h et 48h avant le RDV)."
+          : "Réservation annulée. Pénalité de 50 points (annulation à moins de 24h du RDV)."
+      );
+      setTimeout(() => setPointsNotification(null), 5000);
+    }
+    const { error } = await supabase.from("bookings").delete().eq("id", booking.id);
+    if (!error) setBookings((prev) => prev.filter((b) => b.id !== booking.id));
   };
 
   const dismissCancellationPopup = () => {
@@ -633,7 +665,7 @@ export default function ClientHomePage() {
                   </span>
                   <button
                     type="button"
-                    onClick={() => cancelBooking(b.id)}
+                    onClick={() => cancelBooking(b)}
                     style={{
                       fontSize: "12px",
                       color: "#dc2626",
