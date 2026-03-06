@@ -53,7 +53,14 @@ export default function AuthPage() {
       const user = data?.user;
       const isEmailRateLimit = error?.message?.toLowerCase().includes("rate limit");
       if (error && !(isEmailRateLimit && user)) {
-        setErr(error.message);
+        const msg = error.message.toLowerCase();
+        if (msg.includes("already registered") || msg.includes("user already") || msg.includes("email has already been registered")) {
+          setErr("Un compte existe déjà avec cette adresse email.");
+        } else if (error.message.includes("téléphone") || msg.includes("numéro") || msg.includes("phone")) {
+          setErr("Ce numéro de téléphone est déjà utilisé par un autre compte.");
+        } else {
+          setErr(error.message);
+        }
         setLoading(false);
         return;
       }
