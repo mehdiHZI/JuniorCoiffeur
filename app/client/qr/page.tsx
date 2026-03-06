@@ -149,11 +149,11 @@ export default function ClientQrPage() {
 
         <div style={{ marginBottom: "20px" }}>
           <div
-            style={{ fontSize: "12px", color: "#6b7280", marginBottom: "2px" }}
+            style={{ fontSize: "12px", color: "#C9A227", marginBottom: "2px", fontWeight: 600 }}
           >
             Points
           </div>
-          <div style={{ fontSize: "28px", fontWeight: 700 }}>{points}</div>
+          <div style={{ fontSize: "28px", fontWeight: 700, color: "#C9A227" }}>{points}</div>
         </div>
 
         <div
