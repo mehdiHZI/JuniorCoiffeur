@@ -146,6 +146,16 @@ export default function BarberLayout({
             type="button"
             style={{
               ...menuItemBase,
+              ...(pathname.startsWith("/barber/rdv") ? activeItemExtra : {}),
+            }}
+            onClick={() => nav("/barber/rdv")}
+          >
+            Rendez-vous à venir
+          </button>
+          <button
+            type="button"
+            style={{
+              ...menuItemBase,
               color: "#dc2626",
               borderTop: "1px solid #e5e7eb",
             }}
