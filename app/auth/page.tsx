@@ -13,6 +13,7 @@ export default function AuthPage() {
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
   const [birthdate, setBirthdate] = useState("");
+  const [showForm, setShowForm] = useState<"choice" | "signup" | "login">("choice");
   const [isLogin, setIsLogin] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -122,6 +123,61 @@ export default function AuthPage() {
             style={{ height: "90px", objectFit: "contain" }}
           />
         </div>
+
+        {/* Écran de choix : uniquement les deux options */}
+        {showForm === "choice" && (
+          <>
+            <button
+              type="button"
+              onClick={() => { setShowForm("signup"); setIsLogin(false); setErr(""); }}
+              style={{
+                width: "100%",
+                backgroundColor: "#111",
+                color: "#fff",
+                padding: "14px",
+                borderRadius: "10px",
+                border: "none",
+                fontSize: "15px",
+                fontWeight: 500,
+                cursor: "pointer",
+                marginBottom: "12px",
+              }}
+            >
+              Nouveau chez chriscut ? — Créer mon compte
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowForm("login"); setIsLogin(true); setErr(""); }}
+              style={{
+                width: "100%",
+                backgroundColor: "#fff",
+                color: "#111",
+                padding: "14px",
+                borderRadius: "10px",
+                border: "1px solid #d1d5db",
+                fontSize: "15px",
+                fontWeight: 500,
+                cursor: "pointer",
+              }}
+            >
+              Vous avez déjà un compte ? — Se connecter
+            </button>
+          </>
+        )}
+
+        {/* Formulaires (signup ou login) */}
+        {showForm !== "choice" && (
+          <>
+            <button
+              type="button"
+              onClick={() => { setShowForm("choice"); setErr(""); setInfo(""); setIsResetMode(false); }}
+              style={{
+                background: "none", border: "none", padding: 0, cursor: "pointer",
+                fontSize: "13px", color: "#555", marginBottom: "16px", textDecoration: "underline",
+              }}
+            >
+              ← Retour
+            </button>
 
         {/* Title */}
         <h1 style={{ fontSize: "22px", fontWeight: 600, textAlign: "center", color: "#111", marginBottom: "12px" }}>
@@ -335,6 +391,9 @@ export default function AuthPage() {
             >
               {isLogin ? "Créer mon compte" : "Se connecter"}
             </button>
+          </>
+        )}
+
           </>
         )}
 
