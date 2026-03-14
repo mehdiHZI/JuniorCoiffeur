@@ -13,7 +13,7 @@ export default function AuthPage() {
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
   const [birthdate, setBirthdate] = useState("");
-  const [isLogin, setIsLogin] = useState(true);
+  const [isLogin, setIsLogin] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [info, setInfo] = useState("");
