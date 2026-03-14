@@ -30,24 +30,36 @@ export default function BarberLayout({
     position: "fixed",
     top: "16px",
     left: "16px",
-    padding: "8px 14px",
-    borderRadius: "9999px",
-    border: "1px solid #d1d5db",
-    backgroundColor: "#ffffff",
-    fontSize: "14px",
+    padding: "10px 18px",
+    borderRadius: "12px",
+    border: "2px solid #111",
+    backgroundColor: "#111",
+    color: "#fff",
+    fontSize: "15px",
+    fontWeight: 600,
     cursor: "pointer",
     zIndex: 40,
+    boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+  };
+
+  const menuOverlayStyle: React.CSSProperties = {
+    position: "fixed",
+    inset: 0,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    zIndex: 45,
   };
 
   const menuStyle: React.CSSProperties = {
     position: "fixed",
     top: "56px",
     left: "16px",
+    right: "16px",
+    maxWidth: "280px",
     backgroundColor: "#ffffff",
-    borderRadius: "12px",
-    boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
-    border: "1px solid #e5e7eb",
-    minWidth: "180px",
+    borderRadius: "16px",
+    boxShadow: "0 12px 40px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.08)",
+    border: "2px solid #111",
+    minWidth: "200px",
     zIndex: 50,
     overflow: "hidden",
   };
@@ -55,16 +67,20 @@ export default function BarberLayout({
   const menuItemBase: React.CSSProperties = {
     width: "100%",
     textAlign: "left",
-    padding: "10px 14px",
-    fontSize: "14px",
+    padding: "14px 18px",
+    fontSize: "15px",
+    fontWeight: 500,
     border: "none",
+    borderLeft: "4px solid transparent",
     background: "white",
     cursor: "pointer",
+    color: "#111",
   };
 
   const activeItemExtra: React.CSSProperties = {
     backgroundColor: "#f3f4f6",
-    fontWeight: 600,
+    fontWeight: 700,
+    borderLeft: "4px solid #111",
   };
 
   const nav = (path: string) => {
@@ -91,7 +107,9 @@ export default function BarberLayout({
       </button>
 
       {menuOpen && (
-        <div style={menuStyle}>
+        <>
+          <div role="button" tabIndex={0} aria-label="Fermer le menu" style={menuOverlayStyle} onClick={() => setMenuOpen(false)} onKeyDown={(e) => e.key === "Escape" && setMenuOpen(false)} />
+          <div style={menuStyle}>
           <button
             type="button"
             style={{
@@ -168,6 +186,7 @@ export default function BarberLayout({
             Déconnexion
           </button>
         </div>
+        </>
       )}
 
       {children}
