@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { compressImage } from "@/lib/imageCompression";
 
 const BUCKET = "prestations";
 
@@ -105,9 +106,16 @@ export default function BarberPrestationPage() {
     let imageUrl: string | null = null;
 
     if (imageFile) {
-      const ext = imageFile.name.split(".").pop() || "jpg";
-      const path = `${authData.user.id}/${id}-${Date.now()}.${ext}`;
-      const { error: uploadErr } = await supabase.storage.from(BUCKET).upload(path, imageFile, { upsert: true });
+      let imageBlob: Blob;
+      try {
+        imageBlob = await compressImage(imageFile, { maxDimension: 1000, quality: 0.8 });
+      } catch {
+        setError("Impossible de compresser l'image.");
+        setSaving(false);
+        return;
+      }
+      const path = `${authData.user.id}/${id}-${Date.now()}.jpg`;
+      const { error: uploadErr } = await supabase.storage.from(BUCKET).upload(path, imageBlob, { upsert: true });
       if (!uploadErr) {
         const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path);
         imageUrl = urlData.publicUrl;

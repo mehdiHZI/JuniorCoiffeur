@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { compressImage } from "@/lib/imageCompression";
 import { useRouter } from "next/navigation";
 import { useClientRealtime } from "./ClientRealtimeContext";
 
@@ -407,12 +408,18 @@ export default function ClientHomePage() {
     objectUrlRef.current = previewUrl;
     setAvatarUrl(previewUrl);
 
-    const ext = file.name.split(".").pop() || "jpg";
-    const filePath = `${userId}/${Date.now()}.${ext}`;
+    let blob: Blob;
+    try {
+      blob = await compressImage(file, { maxWidth: 400, maxHeight: 400, quality: 0.8 });
+    } catch {
+      setUploadError("Impossible de compresser l'image.");
+      return;
+    }
+    const filePath = `${userId}/${Date.now()}.jpg`;
 
     const { error: uploadErr } = await supabase.storage
       .from("avatars")
-      .upload(filePath, file, { upsert: true });
+      .upload(filePath, blob, { upsert: true });
 
     if (uploadErr) {
       setUploadError(

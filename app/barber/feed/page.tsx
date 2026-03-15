@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { compressImage } from "@/lib/imageCompression";
 
 type FeedPost = {
   id: number;
@@ -141,11 +142,18 @@ export default function BarberFeedPage() {
     let audioUrl: string | null = null;
 
     if (imageFile) {
-      const ext = imageFile.name.split(".").pop() || "jpg";
-      const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+      let imageBlob: Blob;
+      try {
+        imageBlob = await compressImage(imageFile, { maxDimension: 1200, quality: 0.8 });
+      } catch {
+        setError("Impossible de compresser l'image.");
+        setPosting(false);
+        return;
+      }
+      const path = `${userId}/${crypto.randomUUID()}.jpg`;
       const { error: uploadErr } = await supabase.storage
         .from(BUCKET)
-        .upload(path, imageFile, { upsert: false });
+        .upload(path, imageBlob, { upsert: false });
       if (uploadErr) {
         setError("Erreur envoi image: " + uploadErr.message);
         setPosting(false);
