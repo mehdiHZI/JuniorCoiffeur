@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { compressImage } from "@/lib/imageCompression";
+import { removeStorageFile } from "@/lib/storageCleanup";
 
 const BUCKET = "prestations";
 
@@ -132,6 +133,8 @@ export default function BarberPrestationPage() {
   };
 
   const handleDelete = async (id: number) => {
+    const prestation = prestations.find((p) => p.id === id);
+    if (prestation?.image_url) await removeStorageFile(prestation.image_url);
     const { error: err } = await supabase.from("prestations").delete().eq("id", id);
     if (!err) setPrestations((prev) => prev.filter((p) => p.id !== id));
   };

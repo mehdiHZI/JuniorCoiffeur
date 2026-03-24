@@ -58,19 +58,33 @@ export default function BarberReservationPage() {
   const loadSlots = async () => {
     const { data: authData } = await supabase.auth.getUser();
     if (!authData.user) return;
-    const { data, error: err } = await supabase
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    const { data: allSlots, error: errAll } = await supabase
       .from("availability_slots")
       .select("id, slot_date, start_time, end_time, created_at, address")
       .eq("created_by", authData.user.id)
-      .gte("slot_date", new Date().toISOString().slice(0, 10))
       .order("slot_date", { ascending: true })
       .order("start_time", { ascending: true });
-    if (err) {
-      setError(err.message);
+    if (errAll) {
+      setError(errAll.message);
       setSlots([]);
       return;
     }
-    const slotList = (data as Slot[]) ?? [];
+    const all = (allSlots as Slot[]) ?? [];
+    const pastIds: number[] = [];
+    for (const s of all) {
+      if (s.slot_date < today) pastIds.push(s.id);
+      else if (s.slot_date === today) {
+        const [h, m] = String(s.end_time).slice(0, 5).split(":").map(Number);
+        if ((h ?? 0) * 60 + (m ?? 0) <= currentMinutes) pastIds.push(s.id);
+      }
+    }
+    if (pastIds.length) await supabase.from("availability_slots").delete().in("id", pastIds);
+
+    const slotList = all.filter((s) => !pastIds.includes(s.id));
     setSlots(slotList);
 
     if (slotList.length === 0) {

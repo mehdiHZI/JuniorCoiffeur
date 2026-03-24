@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { compressImage } from "@/lib/imageCompression";
+import { removeStorageFiles } from "@/lib/storageCleanup";
 
 type FeedPost = {
   id: number;
@@ -34,6 +35,22 @@ export default function BarberFeedPage() {
 
   const loadPosts = async () => {
     const fiftyDaysAgo = new Date(Date.now() - 50 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Nettoyer les posts de plus de 50 jours et leurs médias (libère DB + Storage)
+    const { data: oldPosts } = await supabase
+      .from("feed_posts")
+      .select("id, image_url, audio_url")
+      .lt("created_at", fiftyDaysAgo);
+    if (oldPosts?.length) {
+      await removeStorageFiles(
+        (oldPosts as { image_url: string | null; audio_url: string | null }[]).flatMap((p) => [
+          p.image_url,
+          p.audio_url,
+        ])
+      );
+      await supabase.from("feed_posts").delete().lt("created_at", fiftyDaysAgo);
+    }
+
     const { data, error: err } = await supabase
       .from("feed_posts")
       .select("id, content, image_url, audio_url, created_at")
@@ -199,6 +216,10 @@ export default function BarberFeedPage() {
   };
 
   const handleDelete = async (id: number) => {
+    const post = posts.find((p) => p.id === id);
+    if (post?.image_url || post?.audio_url) {
+      await removeStorageFiles([post?.image_url ?? null, post?.audio_url ?? null]);
+    }
     const { error: err } = await supabase.from("feed_posts").delete().eq("id", id);
     if (!err) setPosts((prev) => prev.filter((p) => p.id !== id));
   };

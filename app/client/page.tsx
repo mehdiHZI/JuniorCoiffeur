@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { compressImage } from "@/lib/imageCompression";
+import { isSupabaseStorageUrl, removeStorageFile } from "@/lib/storageCleanup";
 import { useRouter } from "next/navigation";
 import { useClientRealtime } from "./ClientRealtimeContext";
 
@@ -407,6 +408,11 @@ export default function ClientHomePage() {
     const previewUrl = URL.createObjectURL(file);
     objectUrlRef.current = previewUrl;
     setAvatarUrl(previewUrl);
+
+    // Supprimer l'ancienne photo du Storage si elle venait de Supabase (libère de l'espace)
+    if (avatarUrl && isSupabaseStorageUrl(avatarUrl)) {
+      await removeStorageFile(avatarUrl);
+    }
 
     let blob: Blob;
     try {

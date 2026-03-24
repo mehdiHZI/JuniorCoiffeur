@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { PWARegister } from "./components/PWARegister";
 import { InstallPWAButton } from "./components/InstallPWAButton";
+import { FloatingLogo } from "./components/FloatingLogo";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -49,21 +50,7 @@ export default function RootLayout({
       >
         <PWARegister />
         <InstallPWAButton />
-        <div
-          style={{
-            position: "fixed",
-            top: "12px",
-            right: "16px",
-            zIndex: 80,
-          }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/chriscut-logo.png"
-            alt="Logo Chriscut"
-            style={{ height: "44px" }}
-          />
-        </div>
+        <FloatingLogo />
         {children}
       </body>
     </html>

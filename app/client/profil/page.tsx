@@ -194,7 +194,13 @@ export default function ClientProfilPage() {
             type="date"
             value={birthdate}
             onChange={(e) => setBirthdate(e.target.value)}
-            style={inputStyle}
+            style={{
+              ...inputStyle,
+              maxWidth: "100%",
+              minWidth: 0,
+              fontSize: "13px",
+              padding: "10px 10px",
+            }}
           />
           {msg && (
             <p style={{ marginTop: "12px", fontSize: "13px", color: msg.type === "err" ? "#dc2626" : "#16a34a" }}>
