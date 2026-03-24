@@ -26,6 +26,9 @@ body {
     radial-gradient(800px 420px at 100% 12%, rgba(216, 179, 90, 0.16), transparent 60%),
     linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
   font-family: "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 /* Harmonisation des styles inline existants */
@@ -81,6 +84,59 @@ input[style],
 textarea[style],
 select[style] {
   background-color: #fffefb;
+}
+
+/* V4: hiérarchie typo et rythme vertical global */
+h1,
+h2,
+h3 {
+  letter-spacing: 0.01em;
+}
+
+h1 {
+  color: #1f2937;
+  font-weight: 700;
+}
+
+h2,
+h3 {
+  color: #2f3a4a;
+  font-weight: 600;
+}
+
+p,
+label,
+li,
+span {
+  line-height: 1.45;
+}
+
+/* Meilleure lisibilité des formulaires sur mobile */
+input,
+textarea,
+select,
+button {
+  font-size: 14px;
+}
+
+/* Rythme visuel léger entre sections sans casser les layouts existants */
+section + section {
+  margin-top: 4px;
+}
+
+/* Scrollbar plus clean (desktop) */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(185, 147, 47, 0.4);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgba(31, 41, 55, 0.06);
 }
 
 button {
