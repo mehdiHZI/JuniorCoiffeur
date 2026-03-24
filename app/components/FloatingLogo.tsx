@@ -24,7 +24,9 @@ export function FloatingLogo() {
         <img
           src="/chriscut-logo.png"
           alt="Logo Chriscut"
-          style={{ height: "44px", cursor: "pointer" }}
+          width={44}
+          height={44}
+          style={{ width: "44px", height: "44px", objectFit: "contain", cursor: "pointer" }}
         />
       </Link>
     </div>
