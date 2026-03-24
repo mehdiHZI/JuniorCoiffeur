@@ -32,14 +32,14 @@ export default function BarberLayout({
     left: "16px",
     padding: "10px 18px",
     borderRadius: "12px",
-    border: "2px solid #111",
-    backgroundColor: "#111",
-    color: "#fff",
+    border: "1px solid rgba(185, 147, 47, 0.45)",
+    background: "linear-gradient(180deg, #2f2a1f 0%, #1f1b14 100%)",
+    color: "#f7e3a8",
     fontSize: "15px",
     fontWeight: 600,
     cursor: "pointer",
     zIndex: 40,
-    boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+    boxShadow: "0 8px 20px rgba(17, 24, 39, 0.22)",
   };
 
   const menuOverlayStyle: React.CSSProperties = {
@@ -55,10 +55,10 @@ export default function BarberLayout({
     left: "16px",
     right: "16px",
     maxWidth: "280px",
-    backgroundColor: "#ffffff",
+    backgroundColor: "#fffdf7",
     borderRadius: "16px",
-    boxShadow: "0 12px 40px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.08)",
-    border: "2px solid #111",
+    boxShadow: "0 16px 40px rgba(15,23,42,0.16), 0 0 0 1px rgba(185,147,47,0.25)",
+    border: "1px solid rgba(185,147,47,0.35)",
     minWidth: "200px",
     zIndex: 50,
     overflow: "hidden",
@@ -72,15 +72,15 @@ export default function BarberLayout({
     fontWeight: 500,
     border: "none",
     borderLeft: "4px solid transparent",
-    background: "white",
+    background: "#fffdf7",
     cursor: "pointer",
     color: "#111",
   };
 
   const activeItemExtra: React.CSSProperties = {
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#f6efdb",
     fontWeight: 700,
-    borderLeft: "4px solid #111",
+    borderLeft: "4px solid #b9932f",
   };
 
   const nav = (path: string) => {

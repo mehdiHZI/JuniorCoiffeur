@@ -99,7 +99,7 @@ export default function AuthPage() {
   return (
     <div style={{
       minHeight: "100vh",
-      backgroundColor: "#f3f4f6",
+      backgroundColor: "transparent",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
@@ -109,10 +109,11 @@ export default function AuthPage() {
       <div style={{
         width: "100%",
         maxWidth: "440px",
-        backgroundColor: "#ffffff",
+        backgroundColor: "#fffdf7",
         padding: "40px 36px",
         borderRadius: "16px",
-        boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+        border: "1px solid rgba(185,147,47,0.28)",
+        boxShadow: "0 16px 36px rgba(15,23,42,0.1)",
       }}>
 
         <div style={{ textAlign: "center", marginBottom: "24px" }}>
@@ -132,11 +133,11 @@ export default function AuthPage() {
               onClick={() => { setShowForm("signup"); setIsLogin(false); setErr(""); }}
               style={{
                 width: "100%",
-                backgroundColor: "#111",
-                color: "#fff",
+                background: "linear-gradient(180deg, #2f2a1f 0%, #1f1b14 100%)",
+                color: "#f7e3a8",
                 padding: "14px",
                 borderRadius: "10px",
-                border: "none",
+                border: "1px solid rgba(185,147,47,0.45)",
                 fontSize: "15px",
                 fontWeight: 500,
                 cursor: "pointer",
@@ -150,11 +151,11 @@ export default function AuthPage() {
               onClick={() => { setShowForm("login"); setIsLogin(true); setErr(""); }}
               style={{
                 width: "100%",
-                backgroundColor: "#fff",
+                backgroundColor: "#fffdf7",
                 color: "#111",
                 padding: "14px",
                 borderRadius: "10px",
-                border: "1px solid #d1d5db",
+                border: "1px solid rgba(107,114,128,0.35)",
                 fontSize: "15px",
                 fontWeight: 500,
                 cursor: "pointer",
@@ -347,13 +348,13 @@ export default function AuthPage() {
           onClick={isResetMode ? handleForgotPassword : handleAuth}
           disabled={loading}
           style={{
-            width: "100%", backgroundColor: "#111", color: "#fff",
+            width: "100%", background: "linear-gradient(180deg, #2f2a1f 0%, #1f1b14 100%)", color: "#f7e3a8",
             padding: "14px", borderRadius: "10px", border: "none",
             fontSize: "15px", fontWeight: 500, cursor: loading ? "not-allowed" : "pointer",
             opacity: loading ? 0.6 : 1, transition: "background 0.15s",
           }}
-          onMouseEnter={e => { if (!loading) (e.target as HTMLButtonElement).style.backgroundColor = "#333"; }}
-          onMouseLeave={e => { (e.target as HTMLButtonElement).style.backgroundColor = "#111"; }}
+          onMouseEnter={e => { if (!loading) (e.target as HTMLButtonElement).style.filter = "brightness(1.08)"; }}
+          onMouseLeave={e => { (e.target as HTMLButtonElement).style.filter = "none"; }}
         >
           {loading
             ? "Chargement..."
@@ -382,12 +383,12 @@ export default function AuthPage() {
               type="button"
               onClick={() => { setIsLogin(!isLogin); setErr(""); }}
               style={{
-                width: "100%", backgroundColor: "#fff", color: "#111",
-                padding: "14px", borderRadius: "10px", border: "1px solid #d1d5db",
+                width: "100%", backgroundColor: "#fffdf7", color: "#111",
+                padding: "14px", borderRadius: "10px", border: "1px solid rgba(107,114,128,0.35)",
                 fontSize: "15px", fontWeight: 500, cursor: "pointer", transition: "background 0.15s",
               }}
-              onMouseEnter={e => { (e.target as HTMLButtonElement).style.backgroundColor = "#f9fafb"; }}
-              onMouseLeave={e => { (e.target as HTMLButtonElement).style.backgroundColor = "#fff"; }}
+              onMouseEnter={e => { (e.target as HTMLButtonElement).style.backgroundColor = "#f9f4e5"; }}
+              onMouseLeave={e => { (e.target as HTMLButtonElement).style.backgroundColor = "#fffdf7"; }}
             >
               {isLogin ? "Créer mon compte" : "Se connecter"}
             </button>
