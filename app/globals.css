@@ -49,6 +49,40 @@ body {
   border: 1px solid var(--border) !important;
 }
 
+/* Boutons principaux noirs (#111) -> style premium cohérent */
+button[style*="backgroundColor: #111"],
+button[style*="background-color: rgb(17, 17, 17)"] {
+  background: linear-gradient(180deg, #2f2a1f 0%, #1f1b14 100%) !important;
+  color: #f7e3a8 !important;
+  border: 1px solid rgba(185, 147, 47, 0.42) !important;
+}
+
+/* Boutons secondaires blancs */
+button[style*="backgroundColor: #fff"],
+button[style*="backgroundColor: #ffffff"],
+button[style*="background-color: rgb(255, 255, 255)"] {
+  background-color: #fffdf7 !important;
+  border: 1px solid rgba(107, 114, 128, 0.32) !important;
+}
+
+/* Textes secondaires plus lisibles et harmonisés */
+[style*="color: #4b5563"],
+[style*="color:#4b5563"] {
+  color: #5b6472 !important;
+}
+
+[style*="color: #6b7280"],
+[style*="color:#6b7280"] {
+  color: #6b6f76 !important;
+}
+
+/* Champs : adoucir le fond pour l'identité visuelle */
+input[style],
+textarea[style],
+select[style] {
+  background-color: #fffefb;
+}
+
 button {
   transition: box-shadow 0.2s ease, transform 0.2s ease, filter 0.2s ease;
 }

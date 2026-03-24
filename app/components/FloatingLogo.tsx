@@ -26,7 +26,13 @@ export function FloatingLogo() {
           alt="Logo Chriscut"
           width={44}
           height={44}
-          style={{ width: "44px", height: "44px", objectFit: "contain", cursor: "pointer" }}
+          style={{
+            width: "44px",
+            height: "44px",
+            objectFit: "contain",
+            cursor: "pointer",
+            filter: "drop-shadow(0 4px 12px rgba(17, 24, 39, 0.18))",
+          }}
         />
       </Link>
     </div>
