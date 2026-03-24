@@ -130,6 +130,7 @@ export default function ClientProfilPage() {
     width: "100%",
     maxWidth: "480px",
     margin: "0 auto",
+    boxSizing: "border-box",
     backgroundColor: "#ffffff",
     padding: "28px 24px",
     borderRadius: "16px",
