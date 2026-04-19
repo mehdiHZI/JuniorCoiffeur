@@ -20,6 +20,25 @@ type CancellationItem = {
   end_time: string;
 };
 
+type UpcomingBooking = {
+  id: number;
+  slot_id: number;
+  slot_date: string;
+  start_time: string;
+  end_time: string;
+  address: string | null;
+  place_image_urls: string[];
+  barberName: string;
+  prestationTitle: string | null;
+  priceEur: number | null;
+  pricePoints: number | null;
+};
+
+function firstRel<T>(x: T | T[] | null | undefined): T | null {
+  if (x == null) return null;
+  return Array.isArray(x) ? (x[0] ?? null) : x;
+}
+
 export default function ClientHomePage() {
   const router = useRouter();
   const { transactionUpdateVersion } = useClientRealtime();
@@ -41,18 +60,10 @@ export default function ClientHomePage() {
     Record<number, { counts: Record<string, number>; myEmoji: string | null }>
   >({});
   const [pointsNotification, setPointsNotification] = useState<string | null>(null);
-  const [bookings, setBookings] = useState<
-    { id: number; slot_id: number; slot_date: string; start_time: string; end_time: string; place_image_urls: string[] }[]
-  >([]);
+  const [bookings, setBookings] = useState<UpcomingBooking[]>([]);
+  const [bookingDetail, setBookingDetail] = useState<UpcomingBooking | null>(null);
   const [popupCancellations, setPopupCancellations] = useState<CancellationItem[]>([]);
-  const [cancelConfirmBooking, setCancelConfirmBooking] = useState<{
-    id: number;
-    slot_id: number;
-    slot_date: string;
-    start_time: string;
-    end_time: string;
-    place_image_urls?: string[];
-  } | null>(null);
+  const [cancelConfirmBooking, setCancelConfirmBooking] = useState<UpcomingBooking | null>(null);
   const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
@@ -173,22 +184,96 @@ export default function ClientHomePage() {
       const today = new Date().toISOString().slice(0, 10);
       const { data: bookingsData } = await supabase
         .from("bookings")
-        .select("id, slot_id, availability_slots(slot_date, start_time, end_time, address, place_image_urls)")
+        .select(
+          "id, slot_id, prestation_id, prestations ( title, price_eur, price_points ), availability_slots ( slot_date, start_time, end_time, address, place_image_urls, created_by )"
+        )
         .eq("customer_id", customer.id);
-      const withSlots = (bookingsData ?? []).map((b: { id: number; slot_id: number; availability_slots: { slot_date: string; start_time: string; end_time: string; place_image_urls?: unknown } | { slot_date: string; start_time: string; end_time: string; place_image_urls?: unknown }[] | null }) => {
-        const raw = b.availability_slots;
-        const slot = Array.isArray(raw) ? raw[0] : raw;
-        if (!slot) return null;
-        return {
-          id: b.id,
-          slot_id: b.slot_id,
-          slot_date: slot.slot_date,
-          start_time: slot.start_time,
-          end_time: slot.end_time,
-          place_image_urls: parsePlaceImageUrls((slot as { place_image_urls?: unknown }).place_image_urls),
-        };
-      }).filter(Boolean) as { id: number; slot_id: number; slot_date: string; start_time: string; end_time: string; place_image_urls: string[] }[];
-      const upcoming = withSlots.filter((b) => b.slot_date >= today).sort((a, b) => a.slot_date.localeCompare(b.slot_date) || String(a.start_time).localeCompare(String(b.start_time)));
+
+      type Row = {
+        id: number;
+        slot_id: number;
+        prestation_id: number | null;
+        prestations: { title: string; price_eur: number; price_points: number } | { title: string; price_eur: number; price_points: number }[] | null;
+        availability_slots: {
+          slot_date: string;
+          start_time: string;
+          end_time: string;
+          address: string | null;
+          place_image_urls?: unknown;
+          created_by: string;
+        } | {
+          slot_date: string;
+          start_time: string;
+          end_time: string;
+          address: string | null;
+          place_image_urls?: unknown;
+          created_by: string;
+        }[] | null;
+      };
+
+      const partial = (bookingsData ?? [])
+        .map((b) => {
+          const row = b as Row;
+          const slot = firstRel(row.availability_slots);
+          if (!slot) return null;
+          const prest = firstRel(row.prestations);
+          return {
+            id: row.id,
+            slot_id: row.slot_id,
+            slot_date: slot.slot_date,
+            start_time: slot.start_time,
+            end_time: slot.end_time,
+            address: slot.address ?? null,
+            place_image_urls: parsePlaceImageUrls(slot.place_image_urls),
+            barberUserId: slot.created_by,
+            prestationTitle: prest?.title ?? null,
+            priceEur: prest != null ? Number(prest.price_eur) : null,
+            pricePoints: prest != null ? prest.price_points : null,
+          };
+        })
+        .filter(Boolean) as {
+        id: number;
+        slot_id: number;
+        slot_date: string;
+        start_time: string;
+        end_time: string;
+        address: string | null;
+        place_image_urls: string[];
+        barberUserId: string;
+        prestationTitle: string | null;
+        priceEur: number | null;
+        pricePoints: number | null;
+      }[];
+
+      const barberIds = [...new Set(partial.map((p) => p.barberUserId))];
+      const barberNameById: Record<string, string> = {};
+      if (barberIds.length > 0) {
+        const { data: barberProfiles } = await supabase.from("profiles").select("id, first_name, last_name").in("id", barberIds);
+        (barberProfiles ?? []).forEach((p) => {
+          const pid = (p as { id: string }).id;
+          const fn = (p as { first_name: string | null }).first_name ?? "";
+          const ln = (p as { last_name: string | null }).last_name ?? "";
+          barberNameById[pid] = `${fn} ${ln}`.trim() || "Coiffeur";
+        });
+      }
+
+      const withSlots: UpcomingBooking[] = partial.map((p) => ({
+        id: p.id,
+        slot_id: p.slot_id,
+        slot_date: p.slot_date,
+        start_time: p.start_time,
+        end_time: p.end_time,
+        address: p.address,
+        place_image_urls: p.place_image_urls,
+        barberName: barberNameById[p.barberUserId] ?? "Coiffeur",
+        prestationTitle: p.prestationTitle,
+        priceEur: p.priceEur,
+        pricePoints: p.pricePoints,
+      }));
+
+      const upcoming = withSlots
+        .filter((b) => b.slot_date >= today)
+        .sort((a, b) => a.slot_date.localeCompare(b.slot_date) || String(a.start_time).localeCompare(String(b.start_time)));
       setBookings(upcoming);
 
       const { data: cancellationsData } = await supabase
@@ -356,7 +441,7 @@ export default function ClientHomePage() {
     setCancelling(false);
   };
 
-  const cancelBooking = async (booking: { id: number; slot_id: number; slot_date: string; start_time: string; end_time: string }) => {
+  const cancelBooking = async (booking: UpcomingBooking) => {
     const penalty = getCancellationPenalty(booking.slot_date, booking.start_time);
     if (penalty > 0 && customerId) {
       const { error: txErr } = await supabase.from("transactions").insert({
@@ -379,7 +464,10 @@ export default function ClientHomePage() {
       setTimeout(() => setPointsNotification(null), 5000);
     }
     const { error } = await supabase.from("bookings").delete().eq("id", booking.id);
-    if (!error) setBookings((prev) => prev.filter((b) => b.id !== booking.id));
+    if (!error) {
+      setBookings((prev) => prev.filter((b) => b.id !== booking.id));
+      setBookingDetail((d) => (d?.id === booking.id ? null : d));
+    }
   };
 
   const dismissCancellationPopup = () => {
@@ -665,7 +753,7 @@ export default function ClientHomePage() {
                     borderBottom: "1px solid #e5e7eb",
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", gap: "8px", flexWrap: "wrap" }}>
                     <span style={{ fontSize: "14px", color: "#111" }}>
                       {(() => {
                         const [y, m, d] = b.slot_date.split("-").map(Number);
@@ -677,20 +765,44 @@ export default function ClientHomePage() {
                       })()}{" "}
                       {String(b.start_time).slice(0, 5)} – {String(b.end_time).slice(0, 5)}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setCancelConfirmBooking(b)}
-                      style={{
-                        fontSize: "12px",
-                        color: "#dc2626",
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        textDecoration: "underline",
-                      }}
-                    >
-                      Annuler
-                    </button>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCancelConfirmBooking(null);
+                          setBookingDetail(b);
+                        }}
+                        style={{
+                          fontSize: "12px",
+                          color: "#374151",
+                          background: "#fff",
+                          border: "1px solid #d1d5db",
+                          borderRadius: "8px",
+                          padding: "6px 10px",
+                          cursor: "pointer",
+                          fontWeight: 500,
+                        }}
+                      >
+                        Détail
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBookingDetail(null);
+                          setCancelConfirmBooking(b);
+                        }}
+                        style={{
+                          fontSize: "12px",
+                          color: "#dc2626",
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          textDecoration: "underline",
+                        }}
+                      >
+                        Annuler
+                      </button>
+                    </div>
                   </div>
                   {b.place_image_urls.length > 0 && (
                     <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
@@ -703,6 +815,101 @@ export default function ClientHomePage() {
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {bookingDetail && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              backgroundColor: "rgba(0,0,0,0.5)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 99,
+              padding: "20px",
+            }}
+            onClick={() => setBookingDetail(null)}
+          >
+            <div
+              style={{
+                backgroundColor: "#fff",
+                borderRadius: "16px",
+                padding: "28px 24px",
+                maxWidth: "400px",
+                width: "100%",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 style={{ fontSize: "18px", fontWeight: 600, marginBottom: "8px", color: "#111" }}>
+                Détail de la réservation
+              </h3>
+              <p style={{ fontSize: "13px", color: "#6b7280", marginBottom: "16px" }}>
+                Récapitulatif de ta commande
+              </p>
+              <ul style={{ listStyle: "none", padding: 0, margin: 0, marginBottom: "16px", fontSize: "14px", color: "#374151" }}>
+                <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
+                  <strong>Coiffeur :</strong> {bookingDetail.barberName}
+                </li>
+                <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
+                  <strong>Prestation :</strong> {bookingDetail.prestationTitle ?? "—"}
+                </li>
+                <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
+                  <strong>Date :</strong>{" "}
+                  {(() => {
+                    const [y, m, d] = bookingDetail.slot_date.split("-").map(Number);
+                    return new Date(y, m - 1, d).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+                  })()}{" "}
+                  {String(bookingDetail.start_time).slice(0, 5)} – {String(bookingDetail.end_time).slice(0, 5)}
+                </li>
+                <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
+                  <strong>Tarif :</strong>{" "}
+                  {bookingDetail.priceEur != null && bookingDetail.pricePoints != null
+                    ? `${bookingDetail.priceEur} € — ${bookingDetail.pricePoints} points`
+                    : "—"}
+                </li>
+                {bookingDetail.address?.trim() && (
+                  <li style={{ padding: "6px 0", borderBottom: bookingDetail.place_image_urls.length ? "1px solid #e5e7eb" : "none" }}>
+                    <strong>Adresse :</strong> {bookingDetail.address.trim()}
+                  </li>
+                )}
+              </ul>
+              {bookingDetail.place_image_urls.length > 0 && (
+                <div style={{ marginBottom: "20px" }}>
+                  <p style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "8px" }}>Photos du lieu</p>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    {bookingDetail.place_image_urls.map((url) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={url}
+                        src={url}
+                        alt="Lieu du rendez-vous"
+                        style={{ width: "72px", height: "72px", objectFit: "cover", borderRadius: "10px", border: "1px solid #e5e7eb" }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setBookingDetail(null)}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  borderRadius: "10px",
+                  border: "none",
+                  backgroundColor: "#111",
+                  color: "#fff",
+                  fontSize: "15px",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                }}
+              >
+                Fermer
+              </button>
+            </div>
           </div>
         )}
 
