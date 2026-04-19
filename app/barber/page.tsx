@@ -6,8 +6,9 @@ import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
 
 export default function BarberPage() {
   const [token, setToken] = useState("");
-  /** Nombre de points à ajouter (positif) ou retirer (négatif), ex. 10 ou -5 */
+  /** Chiffres uniquement ; le signe vient de pointsDirection (clavier numérique mobile sans « - »). */
   const [pointsInput, setPointsInput] = useState("10");
+  const [pointsDirection, setPointsDirection] = useState<"add" | "remove">("add");
   const [message, setMessage] = useState("");
   const [clientPendingCoupe, setClientPendingCoupe] = useState(false);
 
@@ -161,16 +162,13 @@ export default function BarberPage() {
       return;
     }
 
-    const raw = pointsInput.trim().replace(",", ".").replace(/\s+/g, "");
-    const delta = Number(raw);
-    if (!Number.isFinite(delta) || !Number.isInteger(delta)) {
-      setMessage("Indique un nombre entier de points (ex. 10 ou -5).");
+    const raw = pointsInput.replace(/\D/g, "");
+    const magnitude = parseInt(raw, 10);
+    if (!Number.isFinite(magnitude) || magnitude <= 0) {
+      setMessage("Indique un nombre entier de points supérieur à 0 (ex. 10).");
       return;
     }
-    if (delta === 0) {
-      setMessage("Indique un nombre différent de 0 (positif pour ajouter, négatif pour retirer).");
-      return;
-    }
+    const delta = pointsDirection === "remove" ? -magnitude : magnitude;
 
     const { error: txErr } = await supabase.from("transactions").insert({
       customer_id: customer.id,
@@ -250,9 +248,8 @@ export default function BarberPage() {
         </h1>
 
         <p style={{ fontSize: "14px", color: "#4b5563", marginBottom: "16px" }}>
-          Scanne le QR code de ton client ou colle son contenu, puis indique les points à
-          ajouter (nombre positif) ou à retirer (nombre négatif, ex.{" "}
-          <strong>-10</strong>).
+          Scanne le QR code de ton client ou colle son contenu, puis choisis <strong>Ajouter</strong> ou{" "}
+          <strong>Retirer</strong> et saisis le nombre de points (clavier numérique sur téléphone).
         </p>
 
         <div
@@ -299,15 +296,40 @@ export default function BarberPage() {
           }}
         />
 
+        <label style={{ display: "block", fontSize: "13px", fontWeight: 500, color: "#374151", marginBottom: "6px" }}>
+          Action sur les points
+        </label>
+        <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
+          <button
+            type="button"
+            onClick={() => setPointsDirection("add")}
+            style={pointsDirection === "add" ? buttonPrimary : buttonSecondary}
+          >
+            Ajouter
+          </button>
+          <button
+            type="button"
+            onClick={() => setPointsDirection("remove")}
+            style={
+              pointsDirection === "remove"
+                ? { ...buttonPrimary, backgroundColor: "#b91c1c" }
+                : buttonSecondary
+            }
+          >
+            Retirer
+          </button>
+        </div>
         <label style={{ display: "block", fontSize: "13px", fontWeight: 500, color: "#374151", marginBottom: "4px" }}>
-          Points (positif = ajout, négatif = retrait)
+          Nombre de points
         </label>
         <input
           type="text"
           inputMode="numeric"
-          placeholder="Ex. 10 ou -5"
+          pattern="[0-9]*"
+          autoComplete="off"
+          placeholder="Ex. 10"
           value={pointsInput}
-          onChange={(e) => setPointsInput(e.target.value)}
+          onChange={(e) => setPointsInput(e.target.value.replace(/\D/g, ""))}
           style={{
             width: "100%",
             borderRadius: "10px",
