@@ -610,12 +610,22 @@ export default function ClientReservationPage() {
             <p style={{ fontSize: "14px", color: "#4b5563", marginBottom: "16px" }}>
               Récapitulatif de ta commande :
             </p>
-            <ul style={{ listStyle: "none", padding: 0, margin: 0, marginBottom: "24px", fontSize: "14px", color: "#374151" }}>
+            <ul style={{ listStyle: "none", padding: 0, margin: 0, marginBottom: "16px", fontSize: "14px", color: "#374151" }}>
               <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
                 <strong>Coiffeur :</strong> {`${selectedBarber.first_name ?? ""} ${selectedBarber.last_name ?? ""}`.trim() || "Coiffeur"}
               </li>
               <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
-                <strong>Prestation :</strong> {selectedPrestation.title}
+                <strong>Intitulé :</strong> {selectedPrestation.title}
+              </li>
+              <li
+                style={{
+                  padding: "8px 0",
+                  borderBottom: "1px solid #e5e7eb",
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                <strong style={{ display: "block", marginBottom: "4px" }}>Prestation :</strong>
+                {selectedPrestation.description?.trim() ? selectedPrestation.description.trim() : "—"}
               </li>
               <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
                 <strong>Date :</strong>{" "}
@@ -634,6 +644,21 @@ export default function ClientReservationPage() {
                 </li>
               )}
             </ul>
+            <p
+              style={{
+                fontSize: "12px",
+                color: "#6b7280",
+                lineHeight: 1.5,
+                margin: "0 0 16px",
+                padding: "10px 12px",
+                backgroundColor: "#f9fafb",
+                borderRadius: "10px",
+                border: "1px solid #e5e7eb",
+              }}
+            >
+              En confirmant, tu t&apos;engages à honorer ce rendez-vous ou à prévenir ton coiffeur en cas d&apos;imprévu, dans
+              le respect des conditions d&apos;annulation de ton espace client.
+            </p>
             {confirmSlot.place_image_urls.length > 0 && (
               <div style={{ marginBottom: "20px" }}>
                 <p style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "8px" }}>Photos du lieu</p>
@@ -724,24 +749,22 @@ export default function ClientReservationPage() {
               Récapitulatif de ta commande :
             </p>
             <ul style={{ listStyle: "none", padding: 0, margin: 0, marginBottom: "24px", fontSize: "14px", color: "#374151" }}>
-              <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}><strong>Coiffeur :</strong> {summaryPopup.barberName}</li>
               <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
-                <strong>Prestation :</strong> {summaryPopup.prestationTitle}
+                <strong>Coiffeur :</strong> {summaryPopup.barberName}
               </li>
-              {summaryPopup.prestationDescription && (
-                <li
-                  style={{
-                    padding: "10px 0",
-                    borderBottom: "1px solid #e5e7eb",
-                    fontSize: "13px",
-                    color: "#374151",
-                    whiteSpace: "pre-wrap",
-                  }}
-                >
-                  <strong style={{ display: "block", marginBottom: "4px" }}>Détail de la prestation</strong>
-                  {summaryPopup.prestationDescription}
-                </li>
-              )}
+              <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
+                <strong>Intitulé :</strong> {summaryPopup.prestationTitle}
+              </li>
+              <li
+                style={{
+                  padding: "8px 0",
+                  borderBottom: "1px solid #e5e7eb",
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                <strong style={{ display: "block", marginBottom: "4px" }}>Prestation :</strong>
+                {summaryPopup.prestationDescription?.trim() ? summaryPopup.prestationDescription.trim() : "—"}
+              </li>
               <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
                 <strong>Date :</strong>{" "}
                 {(() => {

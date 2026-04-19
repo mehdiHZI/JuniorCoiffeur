@@ -862,22 +862,18 @@ export default function ClientHomePage() {
                   <strong>Coiffeur :</strong> {bookingDetail.barberName}
                 </li>
                 <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
-                  <strong>Prestation :</strong> {bookingDetail.prestationTitle ?? "—"}
+                  <strong>Intitulé :</strong> {bookingDetail.prestationTitle ?? "—"}
                 </li>
-                {bookingDetail.prestationDescription && (
-                  <li
-                    style={{
-                      padding: "10px 0",
-                      borderBottom: "1px solid #e5e7eb",
-                      fontSize: "13px",
-                      color: "#374151",
-                      whiteSpace: "pre-wrap",
-                    }}
-                  >
-                    <strong style={{ display: "block", marginBottom: "4px" }}>Détail de la prestation</strong>
-                    {bookingDetail.prestationDescription}
-                  </li>
-                )}
+                <li
+                  style={{
+                    padding: "8px 0",
+                    borderBottom: "1px solid #e5e7eb",
+                    whiteSpace: "pre-wrap",
+                  }}
+                >
+                  <strong style={{ display: "block", marginBottom: "4px" }}>Prestation :</strong>
+                  {bookingDetail.prestationDescription?.trim() ? bookingDetail.prestationDescription.trim() : "—"}
+                </li>
                 <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
                   <strong>Date :</strong>{" "}
                   {(() => {
