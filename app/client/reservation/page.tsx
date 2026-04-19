@@ -2,11 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { parsePlaceImageUrls } from "@/lib/placeImageUrls";
 import { useRouter } from "next/navigation";
 
 type Barber = { id: string; first_name: string | null; last_name: string | null };
 type Prestation = { id: number; title: string; image_url: string | null; price_eur: number; price_points: number };
-type Slot = { id: number; slot_date: string; start_time: string; end_time: string; address: string | null };
+type Slot = {
+  id: number;
+  slot_date: string;
+  start_time: string;
+  end_time: string;
+  address: string | null;
+  place_image_urls: string[];
+};
 
 function isSlotStartInFuture(slotDate: string, startTime: string): boolean {
   const [y, m, d] = slotDate.split("-").map(Number);
@@ -24,6 +32,7 @@ type Summary = {
   priceEur: number;
   pricePoints: number;
   address: string | null;
+  placeImageUrls: string[];
 };
 
 export default function ClientReservationPage() {
@@ -109,7 +118,7 @@ export default function ClientReservationPage() {
       setLoadingSlots(true);
       const { data: allSlots } = await supabase
         .from("availability_slots")
-        .select("id, slot_date, start_time, end_time, address")
+        .select("id, slot_date, start_time, end_time, address, place_image_urls")
         .eq("created_by", selectedBarber.id)
         .eq("slot_date", selectedDate)
         .gte("slot_date", new Date().toISOString().slice(0, 10))
@@ -123,7 +132,19 @@ export default function ClientReservationPage() {
       const bookedIds = new Set((booked ?? []).map((b: { slot_id: number }) => b.slot_id));
       const available = (allSlots ?? [])
         .filter((s: { id: number }) => !bookedIds.has(s.id)) as Slot[];
-      const futureOnly = available.filter((s) => isSlotStartInFuture(s.slot_date, s.start_time));
+      const futureOnly: Slot[] = available
+        .filter((s) => isSlotStartInFuture(s.slot_date, s.start_time))
+        .map((s) => {
+          const row = s as Slot & { place_image_urls?: unknown };
+          return {
+            id: row.id,
+            slot_date: row.slot_date,
+            start_time: row.start_time,
+            end_time: row.end_time,
+            address: row.address ?? null,
+            place_image_urls: parsePlaceImageUrls(row.place_image_urls),
+          };
+        });
       setSlots(futureOnly);
       setLoadingSlots(false);
     };
@@ -197,6 +218,7 @@ export default function ClientReservationPage() {
       priceEur: Number(selectedPrestation.price_eur),
       pricePoints: selectedPrestation.price_points,
       address: slot.address ?? null,
+      placeImageUrls: slot.place_image_urls ?? [],
     });
     setSlots((prev) => prev.filter((s) => s.id !== slot.id));
     setBooking(false);
@@ -453,32 +475,47 @@ export default function ClientReservationPage() {
                         key={s.id}
                         style={{
                           display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
+                          flexDirection: "column",
+                          gap: "8px",
                           padding: "12px 0",
                           borderBottom: "1px solid #e5e7eb",
                         }}
                       >
-                        <span style={{ fontSize: "14px", color: "#111" }}>
-                          {String(s.start_time).slice(0, 5)} – {String(s.end_time).slice(0, 5)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmSlot(s)}
-                          disabled={booking}
-                          style={{
-                            padding: "8px 16px",
-                            borderRadius: "8px",
-                            border: "none",
-                            backgroundColor: "#111",
-                            color: "#fff",
-                            fontSize: "14px",
-                            fontWeight: 500,
-                            cursor: booking ? "not-allowed" : "pointer",
-                          }}
-                        >
-                          Réserver
-                        </button>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                          <span style={{ fontSize: "14px", color: "#111" }}>
+                            {String(s.start_time).slice(0, 5)} – {String(s.end_time).slice(0, 5)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmSlot(s)}
+                            disabled={booking}
+                            style={{
+                              padding: "8px 16px",
+                              borderRadius: "8px",
+                              border: "none",
+                              backgroundColor: "#111",
+                              color: "#fff",
+                              fontSize: "14px",
+                              fontWeight: 500,
+                              cursor: booking ? "not-allowed" : "pointer",
+                            }}
+                          >
+                            Réserver
+                          </button>
+                        </div>
+                        {s.place_image_urls.length > 0 && (
+                          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", overflowX: "auto", paddingBottom: "2px" }}>
+                            {s.place_image_urls.map((url) => (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                key={url}
+                                src={url}
+                                alt="Lieu du rendez-vous"
+                                style={{ width: "56px", height: "56px", objectFit: "cover", borderRadius: "8px", border: "1px solid #e5e7eb", flexShrink: 0 }}
+                              />
+                            ))}
+                          </div>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -551,6 +588,22 @@ export default function ClientReservationPage() {
                 </li>
               )}
             </ul>
+            {confirmSlot.place_image_urls.length > 0 && (
+              <div style={{ marginBottom: "20px" }}>
+                <p style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "8px" }}>Photos du lieu</p>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  {confirmSlot.place_image_urls.map((url) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      key={url}
+                      src={url}
+                      alt="Lieu du rendez-vous"
+                      style={{ width: "72px", height: "72px", objectFit: "cover", borderRadius: "10px", border: "1px solid #e5e7eb" }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
             <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
               <button
                 type="button"
@@ -644,6 +697,22 @@ export default function ClientReservationPage() {
                 </li>
               )}
             </ul>
+            {summaryPopup.placeImageUrls.length > 0 && (
+              <div style={{ marginBottom: "20px" }}>
+                <p style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "8px", textAlign: "center" }}>Photos du lieu</p>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center" }}>
+                  {summaryPopup.placeImageUrls.map((url) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      key={url}
+                      src={url}
+                      alt="Lieu du rendez-vous"
+                      style={{ width: "72px", height: "72px", objectFit: "cover", borderRadius: "10px", border: "1px solid #e5e7eb" }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
             <button
               type="button"
               onClick={() => setSummaryPopup(null)}

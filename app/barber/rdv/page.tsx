@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { parsePlaceImageUrls } from "@/lib/placeImageUrls";
 
 type RdvRow = {
   id: number;
@@ -10,6 +11,7 @@ type RdvRow = {
   start_time: string;
   end_time: string;
   address: string | null;
+  place_image_urls: string[];
   clientName: string;
   clientPhone: string;
   prestationTitle: string | null;
@@ -42,7 +44,7 @@ export default function BarberRdvPage() {
 
       const { data: slots, error: slotsErr } = await supabase
         .from("availability_slots")
-        .select("id, slot_date, start_time, end_time, address")
+        .select("id, slot_date, start_time, end_time, address, place_image_urls")
         .eq("created_by", authData.user.id)
         .gte("slot_date", today)
         .order("slot_date", { ascending: true })
@@ -66,9 +68,18 @@ export default function BarberRdvPage() {
         return;
       }
 
-      const slotMap: Record<number, { slot_date: string; start_time: string; end_time: string; address: string | null }> = {};
-      (slots as { id: number; slot_date: string; start_time: string; end_time: string; address: string | null }[]).forEach((s) => {
-        slotMap[s.id] = { slot_date: s.slot_date, start_time: s.start_time, end_time: s.end_time, address: s.address ?? null };
+      const slotMap: Record<
+        number,
+        { slot_date: string; start_time: string; end_time: string; address: string | null; place_image_urls: string[] }
+      > = {};
+      (slots as { id: number; slot_date: string; start_time: string; end_time: string; address: string | null; place_image_urls?: unknown }[]).forEach((s) => {
+        slotMap[s.id] = {
+          slot_date: s.slot_date,
+          start_time: s.start_time,
+          end_time: s.end_time,
+          address: s.address ?? null,
+          place_image_urls: parsePlaceImageUrls(s.place_image_urls),
+        };
       });
 
       const customerIds = [...new Set((bookings as { customer_id: string }[]).map((b) => b.customer_id))];
@@ -130,6 +141,7 @@ export default function BarberRdvPage() {
           start_time: slot?.start_time ?? "",
           end_time: slot?.end_time ?? "",
           address: slot?.address ?? null,
+          place_image_urls: slot?.place_image_urls ?? [],
           clientName: userInfo?.name ?? "Client",
           clientPhone: userInfo?.phone ?? "",
           prestationTitle: b.prestation_id ? (prestationMap[b.prestation_id] ?? null) : null,
@@ -223,6 +235,14 @@ export default function BarberRdvPage() {
                 {rdv.address?.trim() && (
                   <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "4px" }}>
                     Adresse : {rdv.address.trim()}
+                  </div>
+                )}
+                {rdv.place_image_urls.length > 0 && (
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "8px" }}>
+                    {rdv.place_image_urls.map((url) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={url} src={url} alt="" style={{ width: "44px", height: "44px", objectFit: "cover", borderRadius: "6px", border: "1px solid #e5e7eb" }} />
+                    ))}
                   </div>
                 )}
               </li>

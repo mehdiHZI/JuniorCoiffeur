@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { compressImage } from "@/lib/imageCompression";
 import { isSupabaseStorageUrl, removeStorageFile } from "@/lib/storageCleanup";
+import { parsePlaceImageUrls } from "@/lib/placeImageUrls";
 import { useRouter } from "next/navigation";
 import { useClientRealtime } from "./ClientRealtimeContext";
 
@@ -41,7 +42,7 @@ export default function ClientHomePage() {
   >({});
   const [pointsNotification, setPointsNotification] = useState<string | null>(null);
   const [bookings, setBookings] = useState<
-    { id: number; slot_id: number; slot_date: string; start_time: string; end_time: string }[]
+    { id: number; slot_id: number; slot_date: string; start_time: string; end_time: string; place_image_urls: string[] }[]
   >([]);
   const [popupCancellations, setPopupCancellations] = useState<CancellationItem[]>([]);
   const [cancelConfirmBooking, setCancelConfirmBooking] = useState<{
@@ -50,6 +51,7 @@ export default function ClientHomePage() {
     slot_date: string;
     start_time: string;
     end_time: string;
+    place_image_urls?: string[];
   } | null>(null);
   const [cancelling, setCancelling] = useState(false);
 
@@ -171,9 +173,9 @@ export default function ClientHomePage() {
       const today = new Date().toISOString().slice(0, 10);
       const { data: bookingsData } = await supabase
         .from("bookings")
-        .select("id, slot_id, availability_slots(slot_date, start_time, end_time)")
+        .select("id, slot_id, availability_slots(slot_date, start_time, end_time, address, place_image_urls)")
         .eq("customer_id", customer.id);
-      const withSlots = (bookingsData ?? []).map((b: { id: number; slot_id: number; availability_slots: { slot_date: string; start_time: string; end_time: string } | { slot_date: string; start_time: string; end_time: string }[] | null }) => {
+      const withSlots = (bookingsData ?? []).map((b: { id: number; slot_id: number; availability_slots: { slot_date: string; start_time: string; end_time: string; place_image_urls?: unknown } | { slot_date: string; start_time: string; end_time: string; place_image_urls?: unknown }[] | null }) => {
         const raw = b.availability_slots;
         const slot = Array.isArray(raw) ? raw[0] : raw;
         if (!slot) return null;
@@ -183,8 +185,9 @@ export default function ClientHomePage() {
           slot_date: slot.slot_date,
           start_time: slot.start_time,
           end_time: slot.end_time,
+          place_image_urls: parsePlaceImageUrls((slot as { place_image_urls?: unknown }).place_image_urls),
         };
-      }).filter(Boolean) as { id: number; slot_id: number; slot_date: string; start_time: string; end_time: string }[];
+      }).filter(Boolean) as { id: number; slot_id: number; slot_date: string; start_time: string; end_time: string; place_image_urls: string[] }[];
       const upcoming = withSlots.filter((b) => b.slot_date >= today).sort((a, b) => a.slot_date.localeCompare(b.slot_date) || String(a.start_time).localeCompare(String(b.start_time)));
       setBookings(upcoming);
 
@@ -656,37 +659,47 @@ export default function ClientHomePage() {
                   key={b.id}
                   style={{
                     display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
+                    flexDirection: "column",
+                    gap: "8px",
                     padding: "10px 0",
                     borderBottom: "1px solid #e5e7eb",
                   }}
                 >
-                  <span style={{ fontSize: "14px", color: "#111" }}>
-                    {(() => {
-                      const [y, m, d] = b.slot_date.split("-").map(Number);
-                      return new Date(y, m - 1, d).toLocaleDateString("fr-FR", {
-                        weekday: "short",
-                        day: "2-digit",
-                        month: "short",
-                      });
-                    })()}{" "}
-                    {String(b.start_time).slice(0, 5)} – {String(b.end_time).slice(0, 5)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setCancelConfirmBooking(b)}
-                    style={{
-                      fontSize: "12px",
-                      color: "#dc2626",
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      textDecoration: "underline",
-                    }}
-                  >
-                    Annuler
-                  </button>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                    <span style={{ fontSize: "14px", color: "#111" }}>
+                      {(() => {
+                        const [y, m, d] = b.slot_date.split("-").map(Number);
+                        return new Date(y, m - 1, d).toLocaleDateString("fr-FR", {
+                          weekday: "short",
+                          day: "2-digit",
+                          month: "short",
+                        });
+                      })()}{" "}
+                      {String(b.start_time).slice(0, 5)} – {String(b.end_time).slice(0, 5)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCancelConfirmBooking(b)}
+                      style={{
+                        fontSize: "12px",
+                        color: "#dc2626",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        textDecoration: "underline",
+                      }}
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                  {b.place_image_urls.length > 0 && (
+                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                      {b.place_image_urls.map((url) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img key={url} src={url} alt="Lieu du rendez-vous" style={{ width: "48px", height: "48px", objectFit: "cover", borderRadius: "8px", border: "1px solid #e5e7eb" }} />
+                      ))}
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

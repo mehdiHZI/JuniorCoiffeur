@@ -1,8 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { compressImage } from "@/lib/imageCompression";
+import { removeStorageFiles } from "@/lib/storageCleanup";
+import { parsePlaceImageUrls } from "@/lib/placeImageUrls";
+
+const SLOT_PLACE_IMAGES_BUCKET = "slot-place-images";
+const MAX_PLACE_IMAGES = 6;
 
 const SLOT_DURATION_MINUTES = 40;
 
@@ -37,6 +43,7 @@ type Slot = {
   end_time: string;
   created_at: string;
   address: string | null;
+  place_image_urls: string[];
 };
 
 export default function BarberReservationPage() {
@@ -49,6 +56,13 @@ export default function BarberReservationPage() {
   const [startTime, setStartTime] = useState("08:00");
   const [endTime, setEndTime] = useState("12:00");
   const [address, setAddress] = useState("");
+  const [placeImageFiles, setPlaceImageFiles] = useState<File[]>([]);
+  const placeImagePreviews = useMemo(() => placeImageFiles.map((f) => URL.createObjectURL(f)), [placeImageFiles]);
+  useEffect(() => {
+    return () => {
+      placeImagePreviews.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [placeImagePreviews]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cancelModalSlotId, setCancelModalSlotId] = useState<number | null>(null);
@@ -64,7 +78,7 @@ export default function BarberReservationPage() {
 
     const { data: allSlots, error: errAll } = await supabase
       .from("availability_slots")
-      .select("id, slot_date, start_time, end_time, created_at, address")
+      .select("id, slot_date, start_time, end_time, created_at, address, place_image_urls")
       .eq("created_by", authData.user.id)
       .order("slot_date", { ascending: true })
       .order("start_time", { ascending: true });
@@ -73,7 +87,15 @@ export default function BarberReservationPage() {
       setSlots([]);
       return;
     }
-    const all = (allSlots as Slot[]) ?? [];
+    const all = (allSlots ?? []) as {
+      id: number;
+      slot_date: string;
+      start_time: string;
+      end_time: string;
+      created_at: string;
+      address: string | null;
+      place_image_urls?: unknown;
+    }[];
     const pastIds: number[] = [];
     for (const s of all) {
       if (s.slot_date < today) pastIds.push(s.id);
@@ -82,9 +104,35 @@ export default function BarberReservationPage() {
         if ((h ?? 0) * 60 + (m ?? 0) <= currentMinutes) pastIds.push(s.id);
       }
     }
-    if (pastIds.length) await supabase.from("availability_slots").delete().in("id", pastIds);
+    if (pastIds.length) {
+      const { data: pastRows } = await supabase.from("availability_slots").select("place_image_urls").in("id", pastIds);
+      const orphanUrls = (pastRows ?? []).flatMap((r) => parsePlaceImageUrls((r as { place_image_urls?: unknown }).place_image_urls));
+      if (orphanUrls.length) await removeStorageFiles(orphanUrls);
+      await supabase.from("availability_slots").delete().in("id", pastIds);
+    }
 
-    const slotList = all.filter((s) => !pastIds.includes(s.id));
+    const slotList: Slot[] = all
+      .filter((s) => !pastIds.includes(s.id))
+      .map((s) => {
+        const row = s as {
+          id: number;
+          slot_date: string;
+          start_time: string;
+          end_time: string;
+          created_at: string;
+          address: string | null;
+          place_image_urls?: unknown;
+        };
+        return {
+          id: row.id,
+          slot_date: row.slot_date,
+          start_time: row.start_time,
+          end_time: row.end_time,
+          created_at: row.created_at,
+          address: row.address ?? null,
+          place_image_urls: parsePlaceImageUrls(row.place_image_urls),
+        };
+      });
     setSlots(slotList);
 
     if (slotList.length === 0) {
@@ -186,15 +234,42 @@ export default function BarberReservationPage() {
     setSaving(true);
     setError(null);
     const addr = address.trim() || null;
+    let imageUrls: string[] = [];
+    if (placeImageFiles.length > 0) {
+      const uid = authData.user!.id;
+      const stamp = Date.now();
+      for (let i = 0; i < placeImageFiles.length; i++) {
+        const file = placeImageFiles[i];
+        let blob: Blob;
+        try {
+          blob = await compressImage(file, { maxDimension: 1200, quality: 0.8 });
+        } catch {
+          setError("Impossible de compresser une des photos du lieu.");
+          setSaving(false);
+          return;
+        }
+        const path = `${uid}/${stamp}-${i}.jpg`;
+        const { error: upErr } = await supabase.storage.from(SLOT_PLACE_IMAGES_BUCKET).upload(path, blob, { upsert: false });
+        if (upErr) {
+          setError("Erreur envoi photo : " + upErr.message);
+          setSaving(false);
+          return;
+        }
+        const { data: urlData } = supabase.storage.from(SLOT_PLACE_IMAGES_BUCKET).getPublicUrl(path);
+        imageUrls.push(urlData.publicUrl);
+      }
+    }
     const rows = generated.map(({ start, end }) => ({
       slot_date: slotDate,
       start_time: start,
       end_time: end,
       created_by: authData.user!.id,
       address: addr,
+      place_image_urls: imageUrls,
     }));
     const { error: err } = await supabase.from("availability_slots").insert(rows);
     if (err) {
+      if (imageUrls.length) await removeStorageFiles(imageUrls);
       setError(err.message);
       setSaving(false);
       return;
@@ -203,6 +278,7 @@ export default function BarberReservationPage() {
     setStartTime("08:00");
     setEndTime("12:00");
     setAddress("");
+    setPlaceImageFiles([]);
     await loadSlots();
     setSaving(false);
   };
@@ -213,6 +289,9 @@ export default function BarberReservationPage() {
       setError("Ce créneau est déjà réservé, impossible de le supprimer.");
       return;
     }
+    const { data: row } = await supabase.from("availability_slots").select("place_image_urls").eq("id", id).maybeSingle();
+    const urls = parsePlaceImageUrls((row as { place_image_urls?: unknown } | null)?.place_image_urls);
+    if (urls.length) await removeStorageFiles(urls);
     const { error: err } = await supabase.from("availability_slots").delete().eq("id", id);
     if (!err) setSlots((prev) => prev.filter((s) => s.id !== id));
   };
@@ -345,11 +424,63 @@ export default function BarberReservationPage() {
             padding: "10px 12px",
             borderRadius: "10px",
             border: "1px solid #d1d5db",
-            marginBottom: "16px",
+            marginBottom: "12px",
             fontSize: "14px",
             resize: "vertical",
           }}
         />
+        <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "4px", color: "#374151" }}>
+          Photos du lieu (optionnel, max {MAX_PLACE_IMAGES})
+        </label>
+        <p style={{ fontSize: "12px", color: "#6b7280", marginBottom: "8px" }}>
+          Aide les clients à repérer le salon ou le lieu exact du rendez-vous.
+        </p>
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={(e) => {
+            const picked = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            setPlaceImageFiles((prev) => [...prev, ...picked].slice(0, MAX_PLACE_IMAGES));
+          }}
+          style={{ marginBottom: "10px", fontSize: "14px", width: "100%" }}
+        />
+        {placeImageFiles.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "16px" }}>
+            {placeImageFiles.map((file, idx) => (
+              <div key={`${file.name}-${idx}`} style={{ position: "relative" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={placeImagePreviews[idx]}
+                  alt=""
+                  style={{ width: "64px", height: "64px", objectFit: "cover", borderRadius: "8px", border: "1px solid #e5e7eb" }}
+                />
+                <button
+                  type="button"
+                  aria-label="Retirer cette photo"
+                  onClick={() => setPlaceImageFiles((prev) => prev.filter((_, i) => i !== idx))}
+                  style={{
+                    position: "absolute",
+                    top: "-6px",
+                    right: "-6px",
+                    width: "22px",
+                    height: "22px",
+                    borderRadius: "50%",
+                    border: "none",
+                    background: "#111",
+                    color: "#fff",
+                    fontSize: "14px",
+                    lineHeight: 1,
+                    cursor: "pointer",
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <button
           type="button"
           onClick={handleAdd}
@@ -424,6 +555,14 @@ export default function BarberReservationPage() {
                       <> — {bookingClientInfo[s.id].phone}</>
                     )}
                   </span>
+                )}
+                {s.place_image_urls.length > 0 && (
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "6px" }}>
+                    {s.place_image_urls.map((url) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={url} src={url} alt="" style={{ width: "40px", height: "40px", objectFit: "cover", borderRadius: "6px", border: "1px solid #e5e7eb" }} />
+                    ))}
+                  </div>
                 )}
               </li>
             ))}
