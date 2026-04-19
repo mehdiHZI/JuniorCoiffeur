@@ -15,6 +15,9 @@ CREATE TABLE IF NOT EXISTS prestations (
   CONSTRAINT prestation_price_points_non_neg CHECK (price_points >= 0)
 );
 
+-- Texte libre du coiffeur, affiché au client dans le récap de réservation (optionnel)
+ALTER TABLE prestations ADD COLUMN IF NOT EXISTS description text;
+
 ALTER TABLE prestations ENABLE ROW LEVEL SECURITY;
 
 -- Le coiffeur peut tout faire sur ses prestations

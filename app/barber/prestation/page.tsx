@@ -11,6 +11,7 @@ const BUCKET = "prestations";
 type Prestation = {
   id: number;
   title: string;
+  description: string | null;
   image_url: string | null;
   price_eur: number;
   price_points: number;
@@ -22,6 +23,7 @@ export default function BarberPrestationPage() {
   const [prestations, setPrestations] = useState<Prestation[]>([]);
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
   const [priceEur, setPriceEur] = useState("");
   const [pricePoints, setPricePoints] = useState(0);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -33,7 +35,7 @@ export default function BarberPrestationPage() {
     if (!authData.user) return;
     const { data, error: err } = await supabase
       .from("prestations")
-      .select("id, title, image_url, price_eur, price_points, created_at")
+      .select("id, title, description, image_url, price_eur, price_points, created_at")
       .eq("barber_id", authData.user.id)
       .order("created_at", { ascending: false });
     if (err) {
@@ -86,11 +88,13 @@ export default function BarberPrestationPage() {
     setSaving(true);
     setError(null);
 
+    const desc = description.trim();
     const { data: inserted, error: insertErr } = await supabase
       .from("prestations")
       .insert({
         barber_id: authData.user.id,
         title: t,
+        description: desc.length > 0 ? desc : null,
         price_eur: eur,
         price_points: pricePoints,
       })
@@ -125,6 +129,7 @@ export default function BarberPrestationPage() {
     }
 
     setTitle("");
+    setDescription("");
     setPriceEur("");
     setPricePoints(0);
     setImageFile(null);
@@ -171,7 +176,8 @@ export default function BarberPrestationPage() {
           Prestations
         </h1>
         <p style={{ fontSize: "14px", color: "#4b5563", marginBottom: "20px" }}>
-          Ajoute les coupes et prestations que tu proposes (intitulé, photo optionnelle, prix en € et en points).
+          Ajoute les coupes et prestations que tu proposes (intitulé, détails visibles par le client au moment de la
+          réservation, photo optionnelle, prix en € et en points).
         </p>
 
         <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "4px", color: "#374151" }}>Intitulé *</label>
@@ -188,6 +194,28 @@ export default function BarberPrestationPage() {
             border: "1px solid #d1d5db",
             marginBottom: "12px",
             fontSize: "14px",
+          }}
+        />
+
+        <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "4px", color: "#374151" }}>
+          Prestation (texte pour le client)
+        </label>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Ex. durée estimée, style, produits utilisés, consignes avant le RDV…"
+          rows={4}
+          style={{
+            width: "100%",
+            boxSizing: "border-box",
+            padding: "10px 12px",
+            borderRadius: "10px",
+            border: "1px solid #d1d5db",
+            marginBottom: "12px",
+            fontSize: "14px",
+            fontFamily: "inherit",
+            resize: "vertical",
+            minHeight: "88px",
           }}
         />
 
@@ -285,6 +313,11 @@ export default function BarberPrestationPage() {
                   <p style={{ fontSize: "13px", color: "#6b7280", margin: "4px 0 0" }}>
                     {Number(p.price_eur)} € — {p.price_points} pts
                   </p>
+                  {p.description?.trim() && (
+                    <p style={{ fontSize: "12px", color: "#4b5563", margin: "6px 0 0", whiteSpace: "pre-wrap" }}>
+                      {p.description.trim()}
+                    </p>
+                  )}
                 </div>
                 <button
                   type="button"

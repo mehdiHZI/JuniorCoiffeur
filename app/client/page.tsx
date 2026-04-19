@@ -30,6 +30,7 @@ type UpcomingBooking = {
   place_image_urls: string[];
   barberName: string;
   prestationTitle: string | null;
+  prestationDescription: string | null;
   priceEur: number | null;
   pricePoints: number | null;
 };
@@ -185,7 +186,7 @@ export default function ClientHomePage() {
       const { data: bookingsData } = await supabase
         .from("bookings")
         .select(
-          "id, slot_id, prestation_id, prestations ( title, price_eur, price_points ), availability_slots ( slot_date, start_time, end_time, address, place_image_urls, created_by )"
+          "id, slot_id, prestation_id, prestations ( title, description, price_eur, price_points ), availability_slots ( slot_date, start_time, end_time, address, place_image_urls, created_by )"
         )
         .eq("customer_id", customer.id);
 
@@ -193,7 +194,10 @@ export default function ClientHomePage() {
         id: number;
         slot_id: number;
         prestation_id: number | null;
-        prestations: { title: string; price_eur: number; price_points: number } | { title: string; price_eur: number; price_points: number }[] | null;
+        prestations:
+          | { title: string; description: string | null; price_eur: number; price_points: number }
+          | { title: string; description: string | null; price_eur: number; price_points: number }[]
+          | null;
         availability_slots: {
           slot_date: string;
           start_time: string;
@@ -227,6 +231,8 @@ export default function ClientHomePage() {
             place_image_urls: parsePlaceImageUrls(slot.place_image_urls),
             barberUserId: slot.created_by,
             prestationTitle: prest?.title ?? null,
+            prestationDescription:
+              prest?.description != null && String(prest.description).trim() ? String(prest.description).trim() : null,
             priceEur: prest != null ? Number(prest.price_eur) : null,
             pricePoints: prest != null ? prest.price_points : null,
           };
@@ -241,6 +247,7 @@ export default function ClientHomePage() {
         place_image_urls: string[];
         barberUserId: string;
         prestationTitle: string | null;
+        prestationDescription: string | null;
         priceEur: number | null;
         pricePoints: number | null;
       }[];
@@ -267,6 +274,7 @@ export default function ClientHomePage() {
         place_image_urls: p.place_image_urls,
         barberName: barberNameById[p.barberUserId] ?? "Coiffeur",
         prestationTitle: p.prestationTitle,
+        prestationDescription: p.prestationDescription,
         priceEur: p.priceEur,
         pricePoints: p.pricePoints,
       }));
@@ -856,6 +864,20 @@ export default function ClientHomePage() {
                 <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
                   <strong>Prestation :</strong> {bookingDetail.prestationTitle ?? "—"}
                 </li>
+                {bookingDetail.prestationDescription && (
+                  <li
+                    style={{
+                      padding: "10px 0",
+                      borderBottom: "1px solid #e5e7eb",
+                      fontSize: "13px",
+                      color: "#374151",
+                      whiteSpace: "pre-wrap",
+                    }}
+                  >
+                    <strong style={{ display: "block", marginBottom: "4px" }}>Détail de la prestation</strong>
+                    {bookingDetail.prestationDescription}
+                  </li>
+                )}
                 <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
                   <strong>Date :</strong>{" "}
                   {(() => {

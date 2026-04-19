@@ -6,7 +6,14 @@ import { parsePlaceImageUrls } from "@/lib/placeImageUrls";
 import { useRouter } from "next/navigation";
 
 type Barber = { id: string; first_name: string | null; last_name: string | null };
-type Prestation = { id: number; title: string; image_url: string | null; price_eur: number; price_points: number };
+type Prestation = {
+  id: number;
+  title: string;
+  description: string | null;
+  image_url: string | null;
+  price_eur: number;
+  price_points: number;
+};
 type Slot = {
   id: number;
   slot_date: string;
@@ -26,6 +33,7 @@ function isSlotStartInFuture(slotDate: string, startTime: string): boolean {
 type Summary = {
   barberName: string;
   prestationTitle: string;
+  prestationDescription: string | null;
   slotDate: string;
   startTime: string;
   endTime: string;
@@ -100,7 +108,7 @@ export default function ClientReservationPage() {
     const load = async () => {
       const { data } = await supabase
         .from("prestations")
-        .select("id, title, image_url, price_eur, price_points")
+        .select("id, title, description, image_url, price_eur, price_points")
         .eq("barber_id", selectedBarber.id)
         .order("title");
       setPrestations((data as Prestation[]) ?? []);
@@ -212,6 +220,7 @@ export default function ClientReservationPage() {
     setSummaryPopup({
       barberName,
       prestationTitle: selectedPrestation.title,
+      prestationDescription: selectedPrestation.description?.trim() ? selectedPrestation.description.trim() : null,
       slotDate: slot.slot_date,
       startTime: slot.start_time,
       endTime: slot.end_time,
@@ -282,6 +291,28 @@ export default function ClientReservationPage() {
         <h1 style={{ fontSize: "22px", fontWeight: 600, marginBottom: "8px", color: "#111" }}>
           Réservation
         </h1>
+
+        <div
+          style={{
+            marginBottom: "20px",
+            padding: "14px 16px",
+            borderRadius: "12px",
+            border: "1px solid #e5e7eb",
+            borderLeft: "4px solid #111",
+            backgroundColor: "#fafafa",
+          }}
+        >
+          <p style={{ fontSize: "12px", fontWeight: 600, color: "#111", margin: "0 0 6px", letterSpacing: "0.02em" }}>
+            Engagement
+          </p>
+          <p style={{ fontSize: "13px", color: "#4b5563", margin: 0, lineHeight: 1.55 }}>
+            Chaque créneau est réservé à ton nom : le salon t’accueille à l’heure prévue. Merci d’honorer ton
+            rendez-vous ou, en cas d’imprévu, de{" "}
+            <strong style={{ color: "#374151" }}>prévenir ton coiffeur au plus tôt</strong> pour libérer la place.
+            Les annulations tardives peuvent entraîner une pénalité en points, conformément aux règles affichées sur ton
+            espace client lors d’une annulation.
+          </p>
+        </div>
 
         {/* Step 1: Choisir le coiffeur */}
         <div style={{ marginBottom: "24px" }}>
@@ -363,6 +394,21 @@ export default function ClientReservationPage() {
                           <span style={{ display: "block", fontSize: "12px", color: "#6b7280" }}>
                             {Number(p.price_eur)} € — {p.price_points} pts
                           </span>
+                          {p.description?.trim() && (
+                            <span
+                              style={{
+                                display: "block",
+                                fontSize: "11px",
+                                color: "#6b7280",
+                                marginTop: "4px",
+                                lineHeight: 1.35,
+                                maxHeight: "2.7em",
+                                overflow: "hidden",
+                              }}
+                            >
+                              {p.description.trim()}
+                            </span>
+                          )}
                         </div>
                       </button>
                     </li>
@@ -679,7 +725,23 @@ export default function ClientReservationPage() {
             </p>
             <ul style={{ listStyle: "none", padding: 0, margin: 0, marginBottom: "24px", fontSize: "14px", color: "#374151" }}>
               <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}><strong>Coiffeur :</strong> {summaryPopup.barberName}</li>
-              <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}><strong>Prestation :</strong> {summaryPopup.prestationTitle}</li>
+              <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
+                <strong>Prestation :</strong> {summaryPopup.prestationTitle}
+              </li>
+              {summaryPopup.prestationDescription && (
+                <li
+                  style={{
+                    padding: "10px 0",
+                    borderBottom: "1px solid #e5e7eb",
+                    fontSize: "13px",
+                    color: "#374151",
+                    whiteSpace: "pre-wrap",
+                  }}
+                >
+                  <strong style={{ display: "block", marginBottom: "4px" }}>Détail de la prestation</strong>
+                  {summaryPopup.prestationDescription}
+                </li>
+              )}
               <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
                 <strong>Date :</strong>{" "}
                 {(() => {
