@@ -6,7 +6,8 @@ import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
 
 export default function BarberPage() {
   const [token, setToken] = useState("");
-  const [points, setPoints] = useState(10);
+  /** Nombre de points à ajouter (positif) ou retirer (négatif), ex. 10 ou -5 */
+  const [pointsInput, setPointsInput] = useState("10");
   const [message, setMessage] = useState("");
   const [clientPendingCoupe, setClientPendingCoupe] = useState(false);
 
@@ -160,9 +161,20 @@ export default function BarberPage() {
       return;
     }
 
+    const raw = pointsInput.trim().replace(",", ".").replace(/\s+/g, "");
+    const delta = Number(raw);
+    if (!Number.isFinite(delta) || !Number.isInteger(delta)) {
+      setMessage("Indique un nombre entier de points (ex. 10 ou -5).");
+      return;
+    }
+    if (delta === 0) {
+      setMessage("Indique un nombre différent de 0 (positif pour ajouter, négatif pour retirer).");
+      return;
+    }
+
     const { error: txErr } = await supabase.from("transactions").insert({
       customer_id: customer.id,
-      points: Number(points),
+      points: delta,
       barber_user_id: barber.id,
     });
 
@@ -177,7 +189,7 @@ export default function BarberPage() {
       .eq("id", customer.id);
 
     setClientPendingCoupe(false);
-    setMessage("Points ajoutés ✅");
+    setMessage(delta > 0 ? "Points ajoutés ✅" : "Points retirés ✅");
     setToken("");
   };
 
@@ -238,8 +250,9 @@ export default function BarberPage() {
         </h1>
 
         <p style={{ fontSize: "14px", color: "#4b5563", marginBottom: "16px" }}>
-          Scanne le QR code de ton client ou colle son contenu pour lui ajouter
-          des points.
+          Scanne le QR code de ton client ou colle son contenu, puis indique les points à
+          ajouter (nombre positif) ou à retirer (nombre négatif, ex.{" "}
+          <strong>-10</strong>).
         </p>
 
         <div
@@ -286,10 +299,15 @@ export default function BarberPage() {
           }}
         />
 
+        <label style={{ display: "block", fontSize: "13px", fontWeight: 500, color: "#374151", marginBottom: "4px" }}>
+          Points (positif = ajout, négatif = retrait)
+        </label>
         <input
-          type="number"
-          value={points}
-          onChange={(e) => setPoints(Number(e.target.value))}
+          type="text"
+          inputMode="numeric"
+          placeholder="Ex. 10 ou -5"
+          value={pointsInput}
+          onChange={(e) => setPointsInput(e.target.value)}
           style={{
             width: "100%",
             borderRadius: "10px",
@@ -314,7 +332,7 @@ export default function BarberPage() {
             cursor: "pointer",
           }}
         >
-          Ajouter les points
+          Enregistrer les points
         </button>
 
         {clientPendingCoupe && (

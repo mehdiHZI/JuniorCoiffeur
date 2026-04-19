@@ -49,10 +49,14 @@ export function ClientRealtimeProvider({ children }: { children: React.ReactNode
           (payload) => {
             const row = payload.new as { points?: number | null };
             const delta = row.points ?? 0;
-            if (delta <= 0) return;
+            if (delta === 0) return;
             setTransactionUpdateVersion((v) => v + 1);
             if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-            setToast({ message: "Tu viens de recevoir des points chez ton coiffeur.", points: delta });
+            if (delta > 0) {
+              setToast({ message: "Tu viens de recevoir des points chez ton coiffeur.", points: delta });
+            } else {
+              setToast({ message: "Le salon a retiré des points sur ton compte.", points: delta });
+            }
             toastTimeoutRef.current = setTimeout(() => {
               setToast(null);
               toastTimeoutRef.current = null;
@@ -93,7 +97,11 @@ export function ClientRealtimeProvider({ children }: { children: React.ReactNode
             textAlign: "center",
           }}
         >
-          {toast.message} <strong>+{toast.points} pts</strong>
+          {toast.message}{" "}
+          <strong>
+            {toast.points > 0 ? "+" : ""}
+            {toast.points} pts
+          </strong>
         </div>
       )}
     </ClientRealtimeContext.Provider>
