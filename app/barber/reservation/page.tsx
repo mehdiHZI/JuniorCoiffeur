@@ -339,16 +339,14 @@ export default function BarberReservationPage() {
   const handleDeleteDay = async (date: string) => {
     const daySlots = slots.filter((s) => s.slot_date === date);
     if (daySlots.length === 0) return;
-    const reservedCount = daySlots.filter((s) => !!bookingClientInfo[s.id]).length;
-    if (reservedCount > 0) {
-      setError(
-        `Impossible de supprimer ${date} : ${reservedCount} créneau(x) réservé(s). Annule d'abord les réservations de cette journée.`
-      );
+    const deletableSlots = daySlots.filter((s) => !bookingClientInfo[s.id]);
+    if (deletableSlots.length === 0) {
+      setError("Tous les créneaux de cette journée sont déjà réservés.");
       return;
     }
 
-    const ids = daySlots.map((s) => s.id);
-    const uniqueUrls = [...new Set(daySlots.flatMap((s) => s.place_image_urls))];
+    const ids = deletableSlots.map((s) => s.id);
+    const uniqueUrls = [...new Set(deletableSlots.flatMap((s) => s.place_image_urls))];
     if (uniqueUrls.length > 0) await removeStorageFiles(uniqueUrls);
     const { error: err } = await supabase.from("availability_slots").delete().in("id", ids);
     if (err) {
@@ -373,9 +371,10 @@ export default function BarberReservationPage() {
     });
     setExpandedDays((prev) => {
       const next = { ...prev };
-      delete next[date];
+      if (!slots.some((s) => s.slot_date === date && !ids.includes(s.id))) delete next[date];
       return next;
     });
+    setError(null);
   };
 
   const handleCancelReservation = async () => {
