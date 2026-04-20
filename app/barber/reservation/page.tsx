@@ -53,7 +53,7 @@ export default function BarberReservationPage() {
   const [bookingCustomerIds, setBookingCustomerIds] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [slotDate, setSlotDate] = useState("");
-  const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  const [endDate, setEndDate] = useState("");
   const [startTime, setStartTime] = useState("08:00");
   const [endTime, setEndTime] = useState("12:00");
   const [address, setAddress] = useState("");
@@ -69,24 +69,6 @@ export default function BarberReservationPage() {
   const [cancelModalSlotId, setCancelModalSlotId] = useState<number | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling] = useState(false);
-
-  const addSelectedDate = () => {
-    if (!slotDate) {
-      setError("Choisis une date à ajouter.");
-      return;
-    }
-    const today = new Date().toISOString().slice(0, 10);
-    if (slotDate < today) {
-      setError("Impossible d'ajouter une date passée.");
-      return;
-    }
-    setSelectedDates((prev) => (prev.includes(slotDate) ? prev : [...prev, slotDate].sort((a, b) => a.localeCompare(b))));
-    setError(null);
-  };
-
-  const removeSelectedDate = (date: string) => {
-    setSelectedDates((prev) => prev.filter((d) => d !== date));
-  };
 
   const loadSlots = async () => {
     const { data: authData } = await supabase.auth.getUser();
@@ -239,6 +221,11 @@ export default function BarberReservationPage() {
       setError("Renseigne au moins une date et les heures.");
       return;
     }
+    const periodEnd = endDate || slotDate;
+    if (periodEnd < slotDate) {
+      setError("La date de fin doit être après ou égale à la date de début.");
+      return;
+    }
     if (startTime >= endTime) {
       setError("L'heure de fin doit être après l'heure de début.");
       return;
@@ -252,7 +239,13 @@ export default function BarberReservationPage() {
     if (!authData.user) return;
     setSaving(true);
     setError(null);
-    const datesToCreate = selectedDates.length > 0 ? selectedDates : [slotDate];
+    const datesToCreate: string[] = [];
+    let cursor = new Date(`${slotDate}T00:00:00`);
+    const last = new Date(`${periodEnd}T00:00:00`);
+    while (cursor.getTime() <= last.getTime()) {
+      datesToCreate.push(cursor.toISOString().slice(0, 10));
+      cursor.setDate(cursor.getDate() + 1);
+    }
     const addr = address.trim() || null;
     let imageUrls: string[] = [];
     if (placeImageFiles.length > 0) {
@@ -297,7 +290,7 @@ export default function BarberReservationPage() {
       return;
     }
     setSlotDate("");
-    setSelectedDates([]);
+    setEndDate("");
     setStartTime("08:00");
     setEndTime("12:00");
     setAddress("");
@@ -387,10 +380,10 @@ export default function BarberReservationPage() {
         </h1>
         <p style={{ fontSize: "14px", color: "#4b5563", marginBottom: "20px" }}>
           Indique une plage où tu es dispo : des créneaux de 40 min seront créés automatiquement (ex. 8h–12h → 8h00, 8h40, 9h20…).
-          Tu peux aussi appliquer la même plage à plusieurs jours.
+          Tu peux aussi appliquer la même plage sur une période.
         </p>
 
-        <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "4px", color: "#374151" }}>Date</label>
+        <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "4px", color: "#374151" }}>Période (début)</label>
         <input
           type="date"
           value={slotDate}
@@ -406,57 +399,27 @@ export default function BarberReservationPage() {
             fontSize: "14px",
           }}
         />
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "12px" }}>
-          <button
-            type="button"
-            onClick={addSelectedDate}
-            style={{
-              fontSize: "12px",
-              color: "#111",
-              background: "#fff",
-              border: "1px solid #d1d5db",
-              borderRadius: "9999px",
-              padding: "6px 10px",
-              cursor: "pointer",
-            }}
-          >
-            Ajouter ce jour
-          </button>
-        </div>
-        {selectedDates.length > 0 && (
-          <div style={{ marginBottom: "12px" }}>
-            <p style={{ fontSize: "12px", color: "#6b7280", margin: "0 0 8px" }}>
-              Jours sélectionnés ({selectedDates.length})
-            </p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-              {selectedDates.map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => removeSelectedDate(d)}
-                  style={{
-                    fontSize: "12px",
-                    color: "#111",
-                    background: "#f3f4f6",
-                    border: "1px solid #d1d5db",
-                    borderRadius: "9999px",
-                    padding: "6px 10px",
-                    cursor: "pointer",
-                  }}
-                >
-                  {(() => {
-                    const [y, m, day] = d.split("-").map(Number);
-                    return `${new Date(y, m - 1, day).toLocaleDateString("fr-FR", {
-                      weekday: "short",
-                      day: "2-digit",
-                      month: "2-digit",
-                    })} ×`;
-                  })()}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "4px", color: "#374151" }}>
+          Période (fin, optionnel)
+        </label>
+        <input
+          type="date"
+          value={endDate}
+          min={slotDate || new Date().toISOString().slice(0, 10)}
+          onChange={(e) => setEndDate(e.target.value)}
+          style={{
+            width: "100%",
+            boxSizing: "border-box",
+            padding: "10px 12px",
+            borderRadius: "10px",
+            border: "1px solid #d1d5db",
+            marginBottom: "12px",
+            fontSize: "14px",
+          }}
+        />
+        <p style={{ fontSize: "12px", color: "#6b7280", margin: "0 0 12px" }}>
+          Si la date de fin est vide, les créneaux seront créés uniquement pour la date de début.
+        </p>
         <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "4px", color: "#374151" }}>Dispo de (heure début)</label>
         <input
           type="time"
@@ -574,7 +537,7 @@ export default function BarberReservationPage() {
         >
           {saving
             ? "Création des créneaux..."
-            : `Créer les créneaux (40 min)${selectedDates.length > 0 ? ` sur ${selectedDates.length} jour(s)` : ""}`}
+            : `Créer les créneaux (40 min)${endDate ? " sur la période" : ""}`}
         </button>
 
         {error && <p style={{ marginTop: "12px", fontSize: "13px", color: "#dc2626" }}>{error}</p>}
