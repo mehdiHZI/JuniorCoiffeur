@@ -28,6 +28,11 @@ export default function BarberPrestationPage() {
   const [pricePoints, setPricePoints] = useState(0);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editPriceEur, setEditPriceEur] = useState("");
+  const [editPricePoints, setEditPricePoints] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const loadPrestations = async () => {
@@ -142,6 +147,61 @@ export default function BarberPrestationPage() {
     if (prestation?.image_url) await removeStorageFile(prestation.image_url);
     const { error: err } = await supabase.from("prestations").delete().eq("id", id);
     if (!err) setPrestations((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  const startEdit = (p: Prestation) => {
+    setEditingId(p.id);
+    setEditTitle(p.title);
+    setEditDescription(p.description ?? "");
+    setEditPriceEur(String(Number(p.price_eur)));
+    setEditPricePoints(p.price_points);
+    setError(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditTitle("");
+    setEditDescription("");
+    setEditPriceEur("");
+    setEditPricePoints(0);
+  };
+
+  const handleUpdate = async () => {
+    if (editingId == null) return;
+    const t = editTitle.trim();
+    if (!t) {
+      setError("L'intitulé est obligatoire.");
+      return;
+    }
+    const eur = parseFloat(editPriceEur.replace(",", "."));
+    if (isNaN(eur) || eur < 0) {
+      setError("Prix en euros invalide.");
+      return;
+    }
+    if (editPricePoints < 0) {
+      setError("Le prix en points doit être ≥ 0.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const desc = editDescription.trim();
+    const { error: err } = await supabase
+      .from("prestations")
+      .update({
+        title: t,
+        description: desc.length > 0 ? desc : null,
+        price_eur: eur,
+        price_points: editPricePoints,
+      })
+      .eq("id", editingId);
+    if (err) {
+      setError(err.message);
+      setSaving(false);
+      return;
+    }
+    await loadPrestations();
+    cancelEdit();
+    setSaving(false);
   };
 
   const containerStyle: React.CSSProperties = {
@@ -309,23 +369,122 @@ export default function BarberPrestationPage() {
                   />
                 )}
                 <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: "15px", fontWeight: 500, color: "#111" }}>{p.title}</span>
-                  <p style={{ fontSize: "13px", color: "#6b7280", margin: "4px 0 0" }}>
-                    {Number(p.price_eur)} € — {p.price_points} pts
-                  </p>
-                  {p.description?.trim() && (
-                    <p style={{ fontSize: "12px", color: "#4b5563", margin: "6px 0 0", whiteSpace: "pre-wrap" }}>
-                      {p.description.trim()}
-                    </p>
+                  {editingId === p.id ? (
+                    <>
+                      <input
+                        type="text"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        style={{
+                          width: "100%",
+                          boxSizing: "border-box",
+                          padding: "8px 10px",
+                          borderRadius: "8px",
+                          border: "1px solid #d1d5db",
+                          marginBottom: "8px",
+                          fontSize: "14px",
+                        }}
+                      />
+                      <textarea
+                        value={editDescription}
+                        onChange={(e) => setEditDescription(e.target.value)}
+                        rows={3}
+                        style={{
+                          width: "100%",
+                          boxSizing: "border-box",
+                          padding: "8px 10px",
+                          borderRadius: "8px",
+                          border: "1px solid #d1d5db",
+                          marginBottom: "8px",
+                          fontSize: "13px",
+                          fontFamily: "inherit",
+                          resize: "vertical",
+                        }}
+                      />
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={editPriceEur}
+                          onChange={(e) => setEditPriceEur(e.target.value)}
+                          placeholder="Prix €"
+                          style={{
+                            width: "50%",
+                            boxSizing: "border-box",
+                            padding: "8px 10px",
+                            borderRadius: "8px",
+                            border: "1px solid #d1d5db",
+                            fontSize: "13px",
+                          }}
+                        />
+                        <input
+                          type="number"
+                          min={0}
+                          value={editPricePoints}
+                          onChange={(e) => setEditPricePoints(parseInt(e.target.value, 10) || 0)}
+                          placeholder="Points"
+                          style={{
+                            width: "50%",
+                            boxSizing: "border-box",
+                            padding: "8px 10px",
+                            borderRadius: "8px",
+                            border: "1px solid #d1d5db",
+                            fontSize: "13px",
+                          }}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ fontSize: "15px", fontWeight: 500, color: "#111" }}>{p.title}</span>
+                      <p style={{ fontSize: "13px", color: "#6b7280", margin: "4px 0 0" }}>
+                        {Number(p.price_eur)} € — {p.price_points} pts
+                      </p>
+                      {p.description?.trim() && (
+                        <p style={{ fontSize: "12px", color: "#4b5563", margin: "6px 0 0", whiteSpace: "pre-wrap" }}>
+                          {p.description.trim()}
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(p.id)}
-                  style={{ fontSize: "12px", color: "#dc2626", background: "none", border: "none", cursor: "pointer" }}
-                >
-                  Supprimer
-                </button>
+                {editingId === p.id ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    <button
+                      type="button"
+                      onClick={handleUpdate}
+                      disabled={saving}
+                      style={{ fontSize: "12px", color: "#111", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}
+                    >
+                      {saving ? "Enregistrement..." : "Enregistrer"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelEdit}
+                      disabled={saving}
+                      style={{ fontSize: "12px", color: "#6b7280", background: "none", border: "none", cursor: "pointer" }}
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    <button
+                      type="button"
+                      onClick={() => startEdit(p)}
+                      style={{ fontSize: "12px", color: "#111", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}
+                    >
+                      Modifier
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(p.id)}
+                      style={{ fontSize: "12px", color: "#dc2626", background: "none", border: "none", cursor: "pointer" }}
+                    >
+                      Supprimer
+                    </button>
+                  </div>
+                )}
               </li>
             ))}
           </ul>

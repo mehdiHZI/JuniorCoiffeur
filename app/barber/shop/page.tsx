@@ -21,6 +21,11 @@ export default function BarberShopPage() {
   const [points, setPoints] = useState(100);
   const [isCoupeOfferte, setIsCoupeOfferte] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editPoints, setEditPoints] = useState(100);
+  const [editIsCoupeOfferte, setEditIsCoupeOfferte] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadItems = async () => {
@@ -90,6 +95,51 @@ export default function BarberShopPage() {
   const handleDelete = async (id: number) => {
     const { error: err } = await supabase.from("shop_items").delete().eq("id", id);
     if (!err) setItems((prev) => prev.filter((i) => i.id !== id));
+  };
+
+  const startEdit = (item: ShopItem) => {
+    setEditingId(item.id);
+    setEditTitle(item.title);
+    setEditDescription(item.description ?? "");
+    setEditPoints(item.points);
+    setEditIsCoupeOfferte(item.is_coupe_offerte);
+    setError(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditTitle("");
+    setEditDescription("");
+    setEditPoints(100);
+    setEditIsCoupeOfferte(false);
+  };
+
+  const handleUpdate = async () => {
+    if (editingId == null) return;
+    const t = editTitle.trim();
+    if (!t || editPoints < 1) {
+      setError("Intitulé et points (≥ 1) requis.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const { error: err } = await supabase
+      .from("shop_items")
+      .update({
+        title: t,
+        description: editDescription.trim(),
+        points: editPoints,
+        is_coupe_offerte: editIsCoupeOfferte,
+      })
+      .eq("id", editingId);
+    if (err) {
+      setError(err.message);
+      setSaving(false);
+      return;
+    }
+    await loadItems();
+    cancelEdit();
+    setSaving(false);
   };
 
   const containerStyle: React.CSSProperties = {
@@ -218,25 +268,112 @@ export default function BarberShopPage() {
                   borderBottom: "1px solid #e5e7eb",
                 }}
               >
-                <div style={{ fontSize: "15px", fontWeight: 600, color: "#111" }}>{i.title}</div>
-                {i.description && (
-                  <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "4px" }}>{i.description}</div>
+                {editingId === i.id ? (
+                  <>
+                    <input
+                      type="text"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      style={{
+                        width: "100%",
+                        boxSizing: "border-box",
+                        borderRadius: "8px",
+                        border: "1px solid #d1d5db",
+                        padding: "8px 10px",
+                        marginBottom: "8px",
+                        fontSize: "14px",
+                      }}
+                    />
+                    <textarea
+                      value={editDescription}
+                      onChange={(e) => setEditDescription(e.target.value)}
+                      rows={2}
+                      style={{
+                        width: "100%",
+                        boxSizing: "border-box",
+                        borderRadius: "8px",
+                        border: "1px solid #d1d5db",
+                        padding: "8px 10px",
+                        marginBottom: "8px",
+                        fontSize: "13px",
+                        resize: "vertical",
+                      }}
+                    />
+                    <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "8px", flexWrap: "wrap" }}>
+                      <input
+                        type="number"
+                        min={1}
+                        value={editPoints}
+                        onChange={(e) => setEditPoints(Number(e.target.value) || 0)}
+                        style={{
+                          width: "120px",
+                          boxSizing: "border-box",
+                          borderRadius: "8px",
+                          border: "1px solid #d1d5db",
+                          padding: "8px 10px",
+                          fontSize: "13px",
+                        }}
+                      />
+                      <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", cursor: "pointer" }}>
+                        <input
+                          type="checkbox"
+                          checked={editIsCoupeOfferte}
+                          onChange={(e) => setEditIsCoupeOfferte(e.target.checked)}
+                        />
+                        Coupe offerte
+                      </label>
+                    </div>
+                    <div style={{ display: "flex", gap: "10px" }}>
+                      <button
+                        type="button"
+                        onClick={handleUpdate}
+                        disabled={saving}
+                        style={{ fontSize: "12px", color: "#111", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}
+                      >
+                        {saving ? "Enregistrement..." : "Enregistrer"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        disabled={saving}
+                        style={{ fontSize: "12px", color: "#6b7280", background: "none", border: "none", cursor: "pointer" }}
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: "15px", fontWeight: 600, color: "#111" }}>{i.title}</div>
+                    {i.description && (
+                      <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "4px" }}>{i.description}</div>
+                    )}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "6px", gap: "8px", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: "13px", color: "#4b5563" }}>{i.points} points</span>
+                      {i.is_coupe_offerte && (
+                        <span style={{ fontSize: "12px", color: "#b45309", backgroundColor: "#fef3c7", padding: "2px 8px", borderRadius: "6px" }}>
+                          Coupe offerte
+                        </span>
+                      )}
+                      <div style={{ display: "flex", gap: "10px" }}>
+                        <button
+                          type="button"
+                          onClick={() => startEdit(i)}
+                          style={{ fontSize: "12px", color: "#111", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}
+                        >
+                          Modifier
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(i.id)}
+                          style={{ fontSize: "12px", color: "#dc2626", background: "none", border: "none", cursor: "pointer" }}
+                        >
+                          Supprimer
+                        </button>
+                      </div>
+                    </div>
+                  </>
                 )}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "6px" }}>
-                  <span style={{ fontSize: "13px", color: "#4b5563" }}>{i.points} points</span>
-                  {i.is_coupe_offerte && (
-                    <span style={{ fontSize: "12px", color: "#b45309", backgroundColor: "#fef3c7", padding: "2px 8px", borderRadius: "6px" }}>
-                      Coupe offerte
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(i.id)}
-                    style={{ fontSize: "12px", color: "#dc2626", background: "none", border: "none", cursor: "pointer" }}
-                  >
-                    Supprimer
-                  </button>
-                </div>
               </li>
             ))}
           </ul>
