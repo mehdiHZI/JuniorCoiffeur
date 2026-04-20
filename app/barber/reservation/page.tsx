@@ -53,6 +53,7 @@ export default function BarberReservationPage() {
   const [bookingCustomerIds, setBookingCustomerIds] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [slotDate, setSlotDate] = useState("");
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [startTime, setStartTime] = useState("08:00");
   const [endTime, setEndTime] = useState("12:00");
   const [address, setAddress] = useState("");
@@ -68,6 +69,24 @@ export default function BarberReservationPage() {
   const [cancelModalSlotId, setCancelModalSlotId] = useState<number | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling] = useState(false);
+
+  const addSelectedDate = () => {
+    if (!slotDate) {
+      setError("Choisis une date à ajouter.");
+      return;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    if (slotDate < today) {
+      setError("Impossible d'ajouter une date passée.");
+      return;
+    }
+    setSelectedDates((prev) => (prev.includes(slotDate) ? prev : [...prev, slotDate].sort((a, b) => a.localeCompare(b))));
+    setError(null);
+  };
+
+  const removeSelectedDate = (date: string) => {
+    setSelectedDates((prev) => prev.filter((d) => d !== date));
+  };
 
   const loadSlots = async () => {
     const { data: authData } = await supabase.auth.getUser();
@@ -217,7 +236,7 @@ export default function BarberReservationPage() {
 
   const handleAdd = async () => {
     if (!slotDate || !startTime || !endTime) {
-      setError("Renseigne la date et les heures.");
+      setError("Renseigne au moins une date et les heures.");
       return;
     }
     if (startTime >= endTime) {
@@ -233,6 +252,7 @@ export default function BarberReservationPage() {
     if (!authData.user) return;
     setSaving(true);
     setError(null);
+    const datesToCreate = selectedDates.length > 0 ? selectedDates : [slotDate];
     const addr = address.trim() || null;
     let imageUrls: string[] = [];
     if (placeImageFiles.length > 0) {
@@ -259,14 +279,16 @@ export default function BarberReservationPage() {
         imageUrls.push(urlData.publicUrl);
       }
     }
-    const rows = generated.map(({ start, end }) => ({
-      slot_date: slotDate,
-      start_time: start,
-      end_time: end,
-      created_by: authData.user!.id,
-      address: addr,
-      place_image_urls: imageUrls,
-    }));
+    const rows = datesToCreate.flatMap((date) =>
+      generated.map(({ start, end }) => ({
+        slot_date: date,
+        start_time: start,
+        end_time: end,
+        created_by: authData.user!.id,
+        address: addr,
+        place_image_urls: imageUrls,
+      }))
+    );
     const { error: err } = await supabase.from("availability_slots").insert(rows);
     if (err) {
       if (imageUrls.length) await removeStorageFiles(imageUrls);
@@ -275,6 +297,7 @@ export default function BarberReservationPage() {
       return;
     }
     setSlotDate("");
+    setSelectedDates([]);
     setStartTime("08:00");
     setEndTime("12:00");
     setAddress("");
@@ -364,6 +387,7 @@ export default function BarberReservationPage() {
         </h1>
         <p style={{ fontSize: "14px", color: "#4b5563", marginBottom: "20px" }}>
           Indique une plage où tu es dispo : des créneaux de 40 min seront créés automatiquement (ex. 8h–12h → 8h00, 8h40, 9h20…).
+          Tu peux aussi appliquer la même plage à plusieurs jours.
         </p>
 
         <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "4px", color: "#374151" }}>Date</label>
@@ -382,6 +406,57 @@ export default function BarberReservationPage() {
             fontSize: "14px",
           }}
         />
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "12px" }}>
+          <button
+            type="button"
+            onClick={addSelectedDate}
+            style={{
+              fontSize: "12px",
+              color: "#111",
+              background: "#fff",
+              border: "1px solid #d1d5db",
+              borderRadius: "9999px",
+              padding: "6px 10px",
+              cursor: "pointer",
+            }}
+          >
+            Ajouter ce jour
+          </button>
+        </div>
+        {selectedDates.length > 0 && (
+          <div style={{ marginBottom: "12px" }}>
+            <p style={{ fontSize: "12px", color: "#6b7280", margin: "0 0 8px" }}>
+              Jours sélectionnés ({selectedDates.length})
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              {selectedDates.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => removeSelectedDate(d)}
+                  style={{
+                    fontSize: "12px",
+                    color: "#111",
+                    background: "#f3f4f6",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "9999px",
+                    padding: "6px 10px",
+                    cursor: "pointer",
+                  }}
+                >
+                  {(() => {
+                    const [y, m, day] = d.split("-").map(Number);
+                    return `${new Date(y, m - 1, day).toLocaleDateString("fr-FR", {
+                      weekday: "short",
+                      day: "2-digit",
+                      month: "2-digit",
+                    })} ×`;
+                  })()}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "4px", color: "#374151" }}>Dispo de (heure début)</label>
         <input
           type="time"
@@ -497,7 +572,9 @@ export default function BarberReservationPage() {
             cursor: saving ? "not-allowed" : "pointer",
           }}
         >
-          {saving ? "Création des créneaux..." : "Créer les créneaux (40 min)"}
+          {saving
+            ? "Création des créneaux..."
+            : `Créer les créneaux (40 min)${selectedDates.length > 0 ? ` sur ${selectedDates.length} jour(s)` : ""}`}
         </button>
 
         {error && <p style={{ marginTop: "12px", fontSize: "13px", color: "#dc2626" }}>{error}</p>}
