@@ -10,7 +10,7 @@ import { parsePlaceImageUrls } from "@/lib/placeImageUrls";
 const SLOT_PLACE_IMAGES_BUCKET = "slot-place-images";
 const MAX_PLACE_IMAGES = 6;
 
-const SLOT_DURATION_MINUTES = 40;
+const SLOT_DURATION_MINUTES = 45;
 
 function timeToMinutes(t: string): number {
   const [h, m] = String(t).split(":").map(Number);
@@ -232,7 +232,7 @@ export default function BarberReservationPage() {
     }
     const generated = buildSlotsFromRange(startTime, endTime);
     if (generated.length === 0) {
-      setError("La plage doit couvrir au moins 40 minutes.");
+      setError("La plage doit couvrir au moins 45 minutes.");
       return;
     }
     const { data: authData } = await supabase.auth.getUser();
@@ -379,7 +379,7 @@ export default function BarberReservationPage() {
           Réservation
         </h1>
         <p style={{ fontSize: "14px", color: "#4b5563", marginBottom: "20px" }}>
-          Indique une plage où tu es dispo : des créneaux de 40 min seront créés automatiquement (ex. 8h–12h → 8h00, 8h40, 9h20…).
+          Indique une plage où tu es dispo : des créneaux de 45 min seront créés automatiquement (ex. 8h–12h → 8h00, 8h45, 9h30…).
           Tu peux aussi appliquer la même plage sur une période.
         </p>
 
@@ -537,7 +537,7 @@ export default function BarberReservationPage() {
         >
           {saving
             ? "Création des créneaux..."
-            : `Créer les créneaux (40 min)${endDate ? " sur la période" : ""}`}
+            : `Créer les créneaux (45 min)${endDate ? " sur la période" : ""}`}
         </button>
 
         {error && <p style={{ marginTop: "12px", fontSize: "13px", color: "#dc2626" }}>{error}</p>}
