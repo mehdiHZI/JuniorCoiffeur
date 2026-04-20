@@ -36,6 +36,17 @@ function buildSlotsFromRange(startTime: string, endTime: string): { start: strin
   return slots;
 }
 
+function toLocalDateString(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function todayLocalDateString(): string {
+  return toLocalDateString(new Date());
+}
+
 type Slot = {
   id: number;
   slot_date: string;
@@ -74,7 +85,7 @@ export default function BarberReservationPage() {
     const { data: authData } = await supabase.auth.getUser();
     if (!authData.user) return;
     const now = new Date();
-    const today = now.toISOString().slice(0, 10);
+    const today = todayLocalDateString();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
     const { data: allSlots, error: errAll } = await supabase
@@ -240,10 +251,12 @@ export default function BarberReservationPage() {
     setSaving(true);
     setError(null);
     const datesToCreate: string[] = [];
-    let cursor = new Date(`${slotDate}T00:00:00`);
-    const last = new Date(`${periodEnd}T00:00:00`);
+    const [startY, startM, startD] = slotDate.split("-").map(Number);
+    const [endY, endM, endD] = periodEnd.split("-").map(Number);
+    let cursor = new Date(startY, startM - 1, startD, 0, 0, 0, 0);
+    const last = new Date(endY, endM - 1, endD, 0, 0, 0, 0);
     while (cursor.getTime() <= last.getTime()) {
-      datesToCreate.push(cursor.toISOString().slice(0, 10));
+      datesToCreate.push(toLocalDateString(cursor));
       cursor.setDate(cursor.getDate() + 1);
     }
     const addr = address.trim() || null;
@@ -387,7 +400,7 @@ export default function BarberReservationPage() {
         <input
           type="date"
           value={slotDate}
-          min={new Date().toISOString().slice(0, 10)}
+          min={todayLocalDateString()}
           onChange={(e) => setSlotDate(e.target.value)}
           style={{
             width: "100%",
