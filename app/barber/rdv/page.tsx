@@ -7,6 +7,8 @@ import { parsePlaceImageUrls } from "@/lib/placeImageUrls";
 
 type RdvRow = {
   id: number;
+  slot_id: number;
+  customer_id: string;
   slot_date: string;
   start_time: string;
   end_time: string;
@@ -22,144 +24,185 @@ export default function BarberRdvPage() {
   const [loading, setLoading] = useState(true);
   const [list, setList] = useState<RdvRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [cancelModalRdv, setCancelModalRdv] = useState<RdvRow | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+
+  const loadRdv = async () => {
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) {
+      router.push("/auth");
+      return;
+    }
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", authData.user.id)
+      .maybeSingle();
+    if ((profile as { role?: string } | null)?.role !== "barber") {
+      router.push("/barber");
+      return;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    const { data: slots, error: slotsErr } = await supabase
+      .from("availability_slots")
+      .select("id, slot_date, start_time, end_time, address, place_image_urls")
+      .eq("created_by", authData.user.id)
+      .gte("slot_date", today)
+      .order("slot_date", { ascending: true })
+      .order("start_time", { ascending: true });
+
+    if (slotsErr || !slots?.length) {
+      setList([]);
+      setLoading(false);
+      return;
+    }
+
+    const slotIds = (slots as { id: number }[]).map((s) => s.id);
+    const { data: bookings } = await supabase
+      .from("bookings")
+      .select("id, slot_id, customer_id, prestation_id")
+      .in("slot_id", slotIds);
+
+    if (!bookings?.length) {
+      setList([]);
+      setLoading(false);
+      return;
+    }
+
+    const slotMap: Record<
+      number,
+      { slot_date: string; start_time: string; end_time: string; address: string | null; place_image_urls: string[] }
+    > = {};
+    (slots as { id: number; slot_date: string; start_time: string; end_time: string; address: string | null; place_image_urls?: unknown }[]).forEach((s) => {
+      slotMap[s.id] = {
+        slot_date: s.slot_date,
+        start_time: s.start_time,
+        end_time: s.end_time,
+        address: s.address ?? null,
+        place_image_urls: parsePlaceImageUrls(s.place_image_urls),
+      };
+    });
+
+    const customerIds = [...new Set((bookings as { customer_id: string }[]).map((b) => b.customer_id))];
+    const { data: customers } = await supabase
+      .from("customers")
+      .select("id, user_id")
+      .in("id", customerIds);
+
+    const userIds = (customers ?? [])
+      .map((c) => (c as { user_id: string }).user_id)
+      .filter(Boolean) as string[];
+
+    if (userIds.length === 0) {
+      setList([]);
+      setLoading(false);
+      return;
+    }
+
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, first_name, last_name, phone")
+      .in("id", userIds);
+
+    const userToInfo: Record<string, { name: string; phone: string }> = {};
+    (profiles ?? []).forEach((p) => {
+      const pid = (p as { id: string }).id;
+      const fn = (p as { first_name: string | null }).first_name ?? "";
+      const ln = (p as { last_name: string | null }).last_name ?? "";
+      const name = `${fn} ${ln}`.trim() || "Client";
+      const phone = (p as { phone: string | null }).phone ?? "";
+      userToInfo[pid] = { name, phone };
+    });
+
+    const customerToUser: Record<string, string> = {};
+    (customers ?? []).forEach((c) => {
+      const cid = (c as { id: string }).id;
+      const uid = (c as { user_id: string }).user_id;
+      customerToUser[cid] = uid;
+    });
+
+    const prestationIds = [...new Set((bookings as { prestation_id: number | null }[]).map((b) => b.prestation_id).filter(Boolean))] as number[];
+    let prestationMap: Record<number, string> = {};
+    if (prestationIds.length > 0) {
+      const { data: prestations } = await supabase
+        .from("prestations")
+        .select("id, title")
+        .in("id", prestationIds);
+      (prestations ?? []).forEach((p) => {
+        prestationMap[(p as { id: number }).id] = (p as { title: string }).title;
+      });
+    }
+
+    const rows: RdvRow[] = (bookings as { id: number; slot_id: number; customer_id: string; prestation_id: number | null }[]).map((b) => {
+      const slot = slotMap[b.slot_id];
+      const userInfo = userToInfo[customerToUser[b.customer_id]];
+      return {
+        id: b.id,
+        slot_id: b.slot_id,
+        customer_id: b.customer_id,
+        slot_date: slot?.slot_date ?? "",
+        start_time: slot?.start_time ?? "",
+        end_time: slot?.end_time ?? "",
+        address: slot?.address ?? null,
+        place_image_urls: slot?.place_image_urls ?? [],
+        clientName: userInfo?.name ?? "Client",
+        clientPhone: userInfo?.phone ?? "",
+        prestationTitle: b.prestation_id ? (prestationMap[b.prestation_id] ?? null) : null,
+      };
+    });
+
+    rows.sort((a, b) => {
+      const d = a.slot_date.localeCompare(b.slot_date);
+      if (d !== 0) return d;
+      return String(a.start_time).localeCompare(String(b.start_time));
+    });
+
+    setList(rows);
+    setLoading(false);
+  };
 
   useEffect(() => {
     const run = async () => {
-      const { data: authData } = await supabase.auth.getUser();
-      if (!authData.user) {
-        router.push("/auth");
-        return;
-      }
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", authData.user.id)
-        .maybeSingle();
-      if ((profile as { role?: string } | null)?.role !== "barber") {
-        router.push("/barber");
-        return;
-      }
-
-      const today = new Date().toISOString().slice(0, 10);
-
-      const { data: slots, error: slotsErr } = await supabase
-        .from("availability_slots")
-        .select("id, slot_date, start_time, end_time, address, place_image_urls")
-        .eq("created_by", authData.user.id)
-        .gte("slot_date", today)
-        .order("slot_date", { ascending: true })
-        .order("start_time", { ascending: true });
-
-      if (slotsErr || !slots?.length) {
-        setList([]);
-        setLoading(false);
-        return;
-      }
-
-      const slotIds = (slots as { id: number }[]).map((s) => s.id);
-      const { data: bookings } = await supabase
-        .from("bookings")
-        .select("id, slot_id, customer_id, prestation_id")
-        .in("slot_id", slotIds);
-
-      if (!bookings?.length) {
-        setList([]);
-        setLoading(false);
-        return;
-      }
-
-      const slotMap: Record<
-        number,
-        { slot_date: string; start_time: string; end_time: string; address: string | null; place_image_urls: string[] }
-      > = {};
-      (slots as { id: number; slot_date: string; start_time: string; end_time: string; address: string | null; place_image_urls?: unknown }[]).forEach((s) => {
-        slotMap[s.id] = {
-          slot_date: s.slot_date,
-          start_time: s.start_time,
-          end_time: s.end_time,
-          address: s.address ?? null,
-          place_image_urls: parsePlaceImageUrls(s.place_image_urls),
-        };
-      });
-
-      const customerIds = [...new Set((bookings as { customer_id: string }[]).map((b) => b.customer_id))];
-      const { data: customers } = await supabase
-        .from("customers")
-        .select("id, user_id")
-        .in("id", customerIds);
-
-      const userIds = (customers ?? [])
-        .map((c) => (c as { user_id: string }).user_id)
-        .filter(Boolean) as string[];
-
-      if (userIds.length === 0) {
-        setList([]);
-        setLoading(false);
-        return;
-      }
-
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, first_name, last_name, phone")
-        .in("id", userIds);
-
-      const userToInfo: Record<string, { name: string; phone: string }> = {};
-      (profiles ?? []).forEach((p) => {
-        const pid = (p as { id: string }).id;
-        const fn = (p as { first_name: string | null }).first_name ?? "";
-        const ln = (p as { last_name: string | null }).last_name ?? "";
-        const name = `${fn} ${ln}`.trim() || "Client";
-        const phone = (p as { phone: string | null }).phone ?? "";
-        userToInfo[pid] = { name, phone };
-      });
-
-      const customerToUser: Record<string, string> = {};
-      (customers ?? []).forEach((c) => {
-        const cid = (c as { id: string }).id;
-        const uid = (c as { user_id: string }).user_id;
-        customerToUser[cid] = uid;
-      });
-
-      const prestationIds = [...new Set((bookings as { prestation_id: number | null }[]).map((b) => b.prestation_id).filter(Boolean))] as number[];
-      let prestationMap: Record<number, string> = {};
-      if (prestationIds.length > 0) {
-        const { data: prestations } = await supabase
-          .from("prestations")
-          .select("id, title")
-          .in("id", prestationIds);
-        (prestations ?? []).forEach((p) => {
-          prestationMap[(p as { id: number }).id] = (p as { title: string }).title;
-        });
-      }
-
-      const rows: RdvRow[] = (bookings as { id: number; slot_id: number; customer_id: string; prestation_id: number | null }[]).map((b) => {
-        const slot = slotMap[b.slot_id];
-        const userInfo = userToInfo[customerToUser[b.customer_id]];
-        return {
-          id: b.id,
-          slot_date: slot?.slot_date ?? "",
-          start_time: slot?.start_time ?? "",
-          end_time: slot?.end_time ?? "",
-          address: slot?.address ?? null,
-          place_image_urls: slot?.place_image_urls ?? [],
-          clientName: userInfo?.name ?? "Client",
-          clientPhone: userInfo?.phone ?? "",
-          prestationTitle: b.prestation_id ? (prestationMap[b.prestation_id] ?? null) : null,
-        };
-      });
-
-      rows.sort((a, b) => {
-        const d = a.slot_date.localeCompare(b.slot_date);
-        if (d !== 0) return d;
-        return String(a.start_time).localeCompare(String(b.start_time));
-      });
-
-      setList(rows);
-      setLoading(false);
+      await loadRdv();
     };
 
     run();
   }, [router]);
+
+  const handleCancelRdv = async () => {
+    if (!cancelModalRdv) return;
+    setCancelling(true);
+    setError(null);
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) {
+      setCancelling(false);
+      return;
+    }
+    const { error: insertErr } = await supabase.from("booking_cancellations").insert({
+      slot_id: cancelModalRdv.slot_id,
+      customer_id: cancelModalRdv.customer_id,
+      cancel_reason: cancelReason.trim() || null,
+      cancelled_by: authData.user.id,
+    });
+    if (insertErr) {
+      setError(insertErr.message);
+      setCancelling(false);
+      return;
+    }
+    const { error: deleteErr } = await supabase.from("bookings").delete().eq("id", cancelModalRdv.id);
+    if (deleteErr) {
+      setError(deleteErr.message);
+      setCancelling(false);
+      return;
+    }
+    setCancelModalRdv(null);
+    setCancelReason("");
+    await loadRdv();
+    setCancelling(false);
+  };
 
   const containerStyle: React.CSSProperties = {
     minHeight: "100vh",
@@ -222,6 +265,17 @@ export default function BarberRdvPage() {
                       {String(rdv.start_time).slice(0, 5)} – {String(rdv.end_time).slice(0, 5)}
                     </span>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCancelModalRdv(rdv);
+                      setCancelReason("");
+                      setError(null);
+                    }}
+                    style={{ fontSize: "12px", color: "#dc2626", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}
+                  >
+                    Annuler le RDV
+                  </button>
                 </div>
                 <div style={{ fontSize: "14px", color: "#374151", marginTop: "6px" }}>
                   <strong>Client :</strong> {rdv.clientName}
@@ -248,6 +302,92 @@ export default function BarberRdvPage() {
               </li>
             ))}
           </ul>
+        )}
+
+        {cancelModalRdv && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              backgroundColor: "rgba(0,0,0,0.4)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 50,
+              padding: "16px",
+            }}
+            onClick={() => !cancelling && setCancelModalRdv(null)}
+          >
+            <div
+              style={{
+                backgroundColor: "#fff",
+                borderRadius: "16px",
+                padding: "24px",
+                maxWidth: "400px",
+                width: "100%",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 style={{ fontSize: "18px", fontWeight: 600, marginBottom: "8px", color: "#111" }}>
+                Annuler le rendez-vous
+              </h3>
+              <p style={{ fontSize: "14px", color: "#4b5563", marginBottom: "12px" }}>
+                Le motif sera envoyé au client.
+              </p>
+              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "4px", color: "#374151" }}>
+                Motif (optionnel)
+              </label>
+              <textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Ex. imprévu, fermeture exceptionnelle..."
+                rows={3}
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  padding: "10px 12px",
+                  borderRadius: "10px",
+                  border: "1px solid #d1d5db",
+                  marginBottom: "16px",
+                  fontSize: "14px",
+                  resize: "vertical",
+                }}
+              />
+              <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => !cancelling && setCancelModalRdv(null)}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: "10px",
+                    border: "1px solid #d1d5db",
+                    background: "#fff",
+                    fontSize: "14px",
+                    cursor: cancelling ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Retour
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelRdv}
+                  disabled={cancelling}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: "10px",
+                    border: "none",
+                    background: "#dc2626",
+                    color: "#fff",
+                    fontSize: "14px",
+                    cursor: cancelling ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {cancelling ? "Annulation..." : "Confirmer l'annulation"}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
