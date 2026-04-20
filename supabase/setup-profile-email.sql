@@ -6,6 +6,7 @@ ALTER TABLE profiles
 ADD COLUMN IF NOT EXISTS email text,
 ADD COLUMN IF NOT EXISTS first_name text,
 ADD COLUMN IF NOT EXISTS last_name text,
+ADD COLUMN IF NOT EXISTS surnom text,
 ADD COLUMN IF NOT EXISTS phone text,
 ADD COLUMN IF NOT EXISTS birthdate date;
 
@@ -30,8 +31,8 @@ BEGIN
   fname := trim(concat(fn, ' ', ln));
   IF fname = '' THEN fname := NULL; END IF;
 
-  INSERT INTO public.profiles (id, role, email, first_name, last_name, phone, birthdate, full_name)
-  VALUES (new.id, 'client', new.email, NULLIF(fn,''), NULLIF(ln,''), NULLIF(ph,''), bd, fname)
+  INSERT INTO public.profiles (id, role, email, first_name, last_name, surnom, phone, birthdate, full_name)
+  VALUES (new.id, 'client', new.email, NULLIF(fn,''), NULLIF(ln,''), NULL, NULLIF(ph,''), bd, fname)
   ON CONFLICT (id) DO UPDATE SET
     email = EXCLUDED.email,
     first_name = COALESCE(EXCLUDED.first_name, profiles.first_name),

@@ -37,8 +37,8 @@ BEGIN
     END IF;
   END IF;
 
-  INSERT INTO public.profiles (id, role, email, first_name, last_name, phone, birthdate, full_name)
-  VALUES (new.id, 'client', new.email, NULLIF(fn,''), NULLIF(ln,''), NULLIF(ph,''), bd, fname)
+  INSERT INTO public.profiles (id, role, email, first_name, last_name, surnom, phone, birthdate, full_name)
+  VALUES (new.id, 'client', new.email, NULLIF(fn,''), NULLIF(ln,''), NULL, NULLIF(ph,''), bd, fname)
   ON CONFLICT (id) DO UPDATE SET
     email = EXCLUDED.email,
     first_name = COALESCE(EXCLUDED.first_name, profiles.first_name),

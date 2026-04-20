@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { parsePlaceImageUrls } from "@/lib/placeImageUrls";
 import { useRouter } from "next/navigation";
 
-type Barber = { id: string; first_name: string | null; last_name: string | null };
+type Barber = { id: string; first_name: string | null; last_name: string | null; surnom: string | null };
 type Prestation = {
   id: number;
   title: string;
@@ -66,6 +66,14 @@ export default function ClientReservationPage() {
     return { year: d.getFullYear(), month: d.getMonth() };
   });
 
+  const barberDisplayName = (b: Barber | null): string => {
+    if (!b) return "Coiffeur";
+    const nickname = (b.surnom ?? "").trim();
+    if (nickname) return nickname;
+    const fromParts = `${b.first_name ?? ""} ${b.last_name ?? ""}`.trim();
+    return fromParts || "Coiffeur";
+  };
+
   useEffect(() => {
     const run = async () => {
       const { data: authData } = await supabase.auth.getUser();
@@ -86,12 +94,13 @@ export default function ClientReservationPage() {
 
       const { data: barberProfiles } = await supabase
         .from("profiles")
-        .select("id, first_name, last_name")
+        .select("id, first_name, last_name, surnom")
         .eq("role", "barber");
       const list = (barberProfiles ?? []).map((p) => ({
         id: (p as { id: string }).id,
         first_name: (p as { first_name: string | null }).first_name,
         last_name: (p as { last_name: string | null }).last_name,
+        surnom: (p as { surnom: string | null }).surnom,
       }));
       setBarbers(list);
       setLoading(false);
@@ -216,7 +225,7 @@ export default function ClientReservationPage() {
       setBooking(false);
       return;
     }
-    const barberName = `${selectedBarber.first_name ?? ""} ${selectedBarber.last_name ?? ""}`.trim() || "Coiffeur";
+    const barberName = barberDisplayName(selectedBarber);
     setSummaryPopup({
       barberName,
       prestationTitle: selectedPrestation.title,
@@ -324,7 +333,7 @@ export default function ClientReservationPage() {
           ) : (
             <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
               {barbers.map((b) => {
-                const name = `${b.first_name ?? ""} ${b.last_name ?? ""}`.trim() || "Coiffeur";
+                const name = barberDisplayName(b);
                 const isSelected = selectedBarber?.id === b.id;
                 return (
                   <li key={b.id} style={{ marginBottom: "8px" }}>
@@ -612,7 +621,7 @@ export default function ClientReservationPage() {
             </p>
             <ul style={{ listStyle: "none", padding: 0, margin: 0, marginBottom: "16px", fontSize: "14px", color: "#374151" }}>
               <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
-                <strong>Coiffeur :</strong> {`${selectedBarber.first_name ?? ""} ${selectedBarber.last_name ?? ""}`.trim() || "Coiffeur"}
+                <strong>Coiffeur :</strong> {barberDisplayName(selectedBarber)}
               </li>
               <li style={{ padding: "6px 0", borderBottom: "1px solid #e5e7eb" }}>
                 <strong>Intitulé :</strong> {selectedPrestation.title}
