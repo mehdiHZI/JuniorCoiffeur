@@ -80,6 +80,7 @@ export default function BarberReservationPage() {
   const [cancelModalSlotId, setCancelModalSlotId] = useState<number | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling] = useState(false);
+  const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
 
   const loadSlots = async () => {
     const { data: authData } = await supabase.auth.getUser();
@@ -227,6 +228,16 @@ export default function BarberReservationPage() {
     run();
   }, [router]);
 
+  useEffect(() => {
+    setExpandedDays((prev) => {
+      const next = { ...prev };
+      for (const s of slots) {
+        if (!(s.slot_date in next)) next[s.slot_date] = true;
+      }
+      return next;
+    });
+  }, [slots]);
+
   const handleAdd = async () => {
     if (!slotDate || !startTime || !endTime) {
       setError("Renseigne au moins une date et les heures.");
@@ -325,6 +336,48 @@ export default function BarberReservationPage() {
     if (!err) setSlots((prev) => prev.filter((s) => s.id !== id));
   };
 
+  const handleDeleteDay = async (date: string) => {
+    const daySlots = slots.filter((s) => s.slot_date === date);
+    if (daySlots.length === 0) return;
+    const reservedCount = daySlots.filter((s) => !!bookingClientInfo[s.id]).length;
+    if (reservedCount > 0) {
+      setError(
+        `Impossible de supprimer ${date} : ${reservedCount} créneau(x) réservé(s). Annule d'abord les réservations de cette journée.`
+      );
+      return;
+    }
+
+    const ids = daySlots.map((s) => s.id);
+    const uniqueUrls = [...new Set(daySlots.flatMap((s) => s.place_image_urls))];
+    if (uniqueUrls.length > 0) await removeStorageFiles(uniqueUrls);
+    const { error: err } = await supabase.from("availability_slots").delete().in("id", ids);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+
+    setSlots((prev) => prev.filter((s) => s.slot_date !== date));
+    setBookingClientInfo((prev) => {
+      const next: Record<number, { name: string; phone: string }> = {};
+      for (const [k, v] of Object.entries(prev)) {
+        if (!ids.includes(Number(k))) next[Number(k)] = v;
+      }
+      return next;
+    });
+    setBookingCustomerIds((prev) => {
+      const next: Record<number, string> = {};
+      for (const [k, v] of Object.entries(prev)) {
+        if (!ids.includes(Number(k))) next[Number(k)] = v;
+      }
+      return next;
+    });
+    setExpandedDays((prev) => {
+      const next = { ...prev };
+      delete next[date];
+      return next;
+    });
+  };
+
   const handleCancelReservation = async () => {
     if (cancelModalSlotId == null) return;
     const customerId = bookingCustomerIds[cancelModalSlotId];
@@ -377,6 +430,15 @@ export default function BarberReservationPage() {
     boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
   };
 
+  const slotsByDay = useMemo(() => {
+    const grouped: Record<string, Slot[]> = {};
+    for (const s of slots) {
+      if (!grouped[s.slot_date]) grouped[s.slot_date] = [];
+      grouped[s.slot_date].push(s);
+    }
+    return grouped;
+  }, [slots]);
+
   if (loading) {
     return (
       <div style={containerStyle}>
@@ -418,7 +480,7 @@ export default function BarberReservationPage() {
         <input
           type="date"
           value={endDate}
-          min={slotDate || new Date().toISOString().slice(0, 10)}
+          min={slotDate || todayLocalDateString()}
           onChange={(e) => setEndDate(e.target.value)}
           style={{
             width: "100%",
@@ -562,63 +624,124 @@ export default function BarberReservationPage() {
           <p style={{ fontSize: "13px", color: "#6b7280" }}>Aucun créneau.</p>
         ) : (
           <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-            {slots.map((s) => (
-              <li
-                key={s.id}
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "4px",
-                  padding: "10px 0",
-                  borderBottom: "1px solid #e5e7eb",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: "14px", color: "#111" }}>
-                    {(() => {
-                      const [y, m, d] = s.slot_date.split("-").map(Number);
-                      return new Date(y, m - 1, d).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "short" });
-                    })()}{" "}
-                    {String(s.start_time).slice(0, 5)} – {String(s.end_time).slice(0, 5)}
-                  </span>
-                  <div style={{ display: "flex", gap: "8px" }}>
-                    {bookingClientInfo[s.id] ? (
-                      <button
-                        type="button"
-                        onClick={() => { setCancelModalSlotId(s.id); setCancelReason(""); setError(null); }}
-                        style={{ fontSize: "12px", color: "#dc2626", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}
-                      >
-                        Annuler la réservation
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(s.id)}
-                        style={{ fontSize: "12px", color: "#dc2626", background: "none", border: "none", cursor: "pointer" }}
-                      >
-                        Supprimer
-                      </button>
-                    )}
+            {Object.entries(slotsByDay).map(([date, daySlots]) => {
+              const isOpen = expandedDays[date] ?? true;
+              const [y, m, d] = date.split("-").map(Number);
+              const dayLabel = new Date(y, m - 1, d).toLocaleDateString("fr-FR", {
+                weekday: "long",
+                day: "2-digit",
+                month: "long",
+              });
+              return (
+                <li key={date} style={{ borderBottom: "1px solid #e5e7eb", padding: "10px 0" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedDays((prev) => ({ ...prev, [date]: !isOpen }))}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        margin: 0,
+                        fontSize: "14px",
+                        color: "#111",
+                        fontWeight: 600,
+                        textTransform: "capitalize",
+                        cursor: "pointer",
+                        textAlign: "left",
+                      }}
+                    >
+                      {isOpen ? "▼" : "▶"} {dayLabel} ({daySlots.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteDay(date)}
+                      style={{
+                        fontSize: "12px",
+                        color: "#dc2626",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        textDecoration: "underline",
+                      }}
+                    >
+                      Supprimer la journée
+                    </button>
                   </div>
-                </div>
-                {bookingClientInfo[s.id] && (
-                  <span style={{ fontSize: "13px", color: "#4b5563", display: "block", marginTop: "4px" }}>
-                    Réservé par : {bookingClientInfo[s.id].name}
-                    {bookingClientInfo[s.id].phone && (
-                      <> — {bookingClientInfo[s.id].phone}</>
-                    )}
-                  </span>
-                )}
-                {s.place_image_urls.length > 0 && (
-                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "6px" }}>
-                    {s.place_image_urls.map((url) => (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img key={url} src={url} alt="" style={{ width: "40px", height: "40px", objectFit: "cover", borderRadius: "6px", border: "1px solid #e5e7eb" }} />
-                    ))}
-                  </div>
-                )}
-              </li>
-            ))}
+                  {isOpen && (
+                    <ul style={{ listStyle: "none", padding: 0, margin: "10px 0 0" }}>
+                      {daySlots.map((s) => (
+                        <li
+                          key={s.id}
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "4px",
+                            padding: "8px 0",
+                            borderTop: "1px dashed #e5e7eb",
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ fontSize: "14px", color: "#111" }}>
+                              {String(s.start_time).slice(0, 5)} – {String(s.end_time).slice(0, 5)}
+                            </span>
+                            <div style={{ display: "flex", gap: "8px" }}>
+                              {bookingClientInfo[s.id] ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCancelModalSlotId(s.id);
+                                    setCancelReason("");
+                                    setError(null);
+                                  }}
+                                  style={{
+                                    fontSize: "12px",
+                                    color: "#dc2626",
+                                    background: "none",
+                                    border: "none",
+                                    cursor: "pointer",
+                                    textDecoration: "underline",
+                                  }}
+                                >
+                                  Annuler la réservation
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDelete(s.id)}
+                                  style={{ fontSize: "12px", color: "#dc2626", background: "none", border: "none", cursor: "pointer" }}
+                                >
+                                  Supprimer
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          {bookingClientInfo[s.id] && (
+                            <span style={{ fontSize: "13px", color: "#4b5563", display: "block", marginTop: "4px" }}>
+                              Réservé par : {bookingClientInfo[s.id].name}
+                              {bookingClientInfo[s.id].phone && <> — {bookingClientInfo[s.id].phone}</>}
+                            </span>
+                          )}
+                          {s.place_image_urls.length > 0 && (
+                            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "6px" }}>
+                              {s.place_image_urls.map((url) => (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  key={url}
+                                  src={url}
+                                  alt=""
+                                  style={{ width: "40px", height: "40px", objectFit: "cover", borderRadius: "6px", border: "1px solid #e5e7eb" }}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
 
