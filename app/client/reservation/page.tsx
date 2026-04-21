@@ -163,7 +163,7 @@ export default function ClientReservationPage() {
         bookedIds = new Set(
           (occupied ?? [])
             .map((r: { slot_id: number | string }) => Number(r.slot_id))
-            .filter((id) => Number.isFinite(id))
+            .filter((id: number) => Number.isFinite(id))
         );
       }
       const available = (allSlots ?? [])
@@ -224,7 +224,7 @@ export default function ClientReservationPage() {
         bookedIds = new Set(
           (occupied ?? [])
             .map((r: { slot_id: number | string }) => Number(r.slot_id))
-            .filter((id) => Number.isFinite(id))
+            .filter((id: number) => Number.isFinite(id))
         );
       }
       const withAvailability = new Set<string>();
