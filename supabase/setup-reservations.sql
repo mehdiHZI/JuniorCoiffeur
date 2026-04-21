@@ -69,3 +69,20 @@ DROP POLICY IF EXISTS "Barbers can read bookings" ON bookings;
 CREATE POLICY "Barbers can read bookings"
 ON bookings FOR SELECT TO authenticated
 USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'barber'));
+
+-- 3) Occupation des créneaux (tous les clients) : évite d’afficher « dispo » alors que quelqu’un d’autre a réservé
+--    (la RLS « Clients can read own bookings » cache les résas des autres).
+CREATE OR REPLACE FUNCTION public.get_booked_slot_ids(slot_ids bigint[])
+RETURNS TABLE(slot_id bigint)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT b.slot_id
+  FROM bookings b
+  WHERE b.slot_id = ANY(slot_ids);
+$$;
+
+REVOKE ALL ON FUNCTION public.get_booked_slot_ids(bigint[]) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_booked_slot_ids(bigint[]) TO authenticated;

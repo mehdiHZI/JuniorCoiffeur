@@ -30,6 +30,14 @@ function isSlotStartInFuture(slotDate: string, startTime: string): boolean {
   return slotStart.getTime() > Date.now();
 }
 
+function todayLocalDateString(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 type Summary = {
   barberName: string;
   prestationTitle: string;
@@ -133,22 +141,33 @@ export default function ClientReservationPage() {
     }
     const load = async () => {
       setLoadingSlots(true);
+      const todayStr = todayLocalDateString();
       const { data: allSlots } = await supabase
         .from("availability_slots")
         .select("id, slot_date, start_time, end_time, address, place_image_urls")
         .eq("created_by", selectedBarber.id)
         .eq("slot_date", selectedDate)
-        .gte("slot_date", new Date().toISOString().slice(0, 10))
+        .gte("slot_date", todayStr)
         .order("start_time");
 
-      const { data: booked } = await supabase
-        .from("bookings")
-        .select("slot_id")
-        .in("slot_id", (allSlots ?? []).map((s: { id: number }) => s.id));
-
-      const bookedIds = new Set((booked ?? []).map((b: { slot_id: number }) => b.slot_id));
+      const slotIds = (allSlots ?? []).map((s: { id: number }) => s.id);
+      let bookedIds = new Set<number>();
+      if (slotIds.length > 0) {
+        const { data: occupied, error: occErr } = await supabase.rpc("get_booked_slot_ids", { slot_ids: slotIds });
+        if (occErr) {
+          setMessage("Impossible de vérifier les créneaux déjà pris : " + occErr.message);
+          setSlots([]);
+          setLoadingSlots(false);
+          return;
+        }
+        bookedIds = new Set(
+          (occupied ?? [])
+            .map((r: { slot_id: number | string }) => Number(r.slot_id))
+            .filter((id) => Number.isFinite(id))
+        );
+      }
       const available = (allSlots ?? [])
-        .filter((s: { id: number }) => !bookedIds.has(s.id)) as Slot[];
+        .filter((s: { id: number }) => !bookedIds.has(Number(s.id))) as Slot[];
       const futureOnly: Slot[] = available
         .filter((s) => isSlotStartInFuture(s.slot_date, s.start_time))
         .map((s) => {
@@ -176,9 +195,9 @@ export default function ClientReservationPage() {
     }
     const start = new Date(calendarMonth.year, calendarMonth.month, 1);
     const end = new Date(calendarMonth.year, calendarMonth.month + 2, 0); // fin du mois suivant
-    const startStr = start.toISOString().slice(0, 10);
-    const endStr = end.toISOString().slice(0, 10);
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const startStr = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+    const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+    const todayStr = todayLocalDateString();
 
     const load = async () => {
       const { data: allSlots } = await supabase
@@ -194,15 +213,23 @@ export default function ClientReservationPage() {
         return;
       }
 
-      const { data: booked } = await supabase
-        .from("bookings")
-        .select("slot_id")
-        .in("slot_id", (allSlots as { id: number }[]).map((s) => s.id));
-
-      const bookedIds = new Set((booked ?? []).map((b: { slot_id: number }) => b.slot_id));
+      const calSlotIds = (allSlots as { id: number }[]).map((s) => s.id);
+      let bookedIds = new Set<number>();
+      if (calSlotIds.length > 0) {
+        const { data: occupied, error: occErr } = await supabase.rpc("get_booked_slot_ids", { slot_ids: calSlotIds });
+        if (occErr) {
+          setDatesWithAvailability(new Set());
+          return;
+        }
+        bookedIds = new Set(
+          (occupied ?? [])
+            .map((r: { slot_id: number | string }) => Number(r.slot_id))
+            .filter((id) => Number.isFinite(id))
+        );
+      }
       const withAvailability = new Set<string>();
       (allSlots as { id: number; slot_date: string; start_time: string }[]).forEach((s) => {
-        if (bookedIds.has(s.id)) return;
+        if (bookedIds.has(Number(s.id))) return;
         if (!isSlotStartInFuture(s.slot_date, s.start_time)) return;
         withAvailability.add(s.slot_date);
       });
@@ -257,7 +284,7 @@ export default function ClientReservationPage() {
     return new Date(y, m).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
   };
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalDateString();
   const days = daysInMonth(calendarMonth.year, calendarMonth.month);
 
   const containerStyle: React.CSSProperties = {
