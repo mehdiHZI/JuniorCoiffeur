@@ -4,7 +4,6 @@ import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { compressImage } from "@/lib/imageCompression";
-import { removeStorageFiles } from "@/lib/storageCleanup";
 import { parsePlaceImageUrls } from "@/lib/placeImageUrls";
 
 const SLOT_PLACE_IMAGES_BUCKET = "slot-place-images";
@@ -118,9 +117,7 @@ export default function BarberReservationPage() {
       }
     }
     if (pastIds.length) {
-      const { data: pastRows } = await supabase.from("availability_slots").select("place_image_urls").in("id", pastIds);
-      const orphanUrls = (pastRows ?? []).flatMap((r) => parsePlaceImageUrls((r as { place_image_urls?: unknown }).place_image_urls));
-      if (orphanUrls.length) await removeStorageFiles(orphanUrls);
+      // Les photos du lieu sont permanentes : on nettoie les lignes de créneaux passés, jamais les fichiers image.
       await supabase.from("availability_slots").delete().in("id", pastIds);
     }
 
@@ -308,7 +305,6 @@ export default function BarberReservationPage() {
     );
     const { error: err } = await supabase.from("availability_slots").insert(rows);
     if (err) {
-      if (imageUrls.length) await removeStorageFiles(imageUrls);
       setError(err.message);
       setSaving(false);
       return;
@@ -329,9 +325,6 @@ export default function BarberReservationPage() {
       setError("Ce créneau est déjà réservé, impossible de le supprimer.");
       return;
     }
-    const { data: row } = await supabase.from("availability_slots").select("place_image_urls").eq("id", id).maybeSingle();
-    const urls = parsePlaceImageUrls((row as { place_image_urls?: unknown } | null)?.place_image_urls);
-    if (urls.length) await removeStorageFiles(urls);
     const { error: err } = await supabase.from("availability_slots").delete().eq("id", id);
     if (!err) setSlots((prev) => prev.filter((s) => s.id !== id));
   };
@@ -346,8 +339,6 @@ export default function BarberReservationPage() {
     }
 
     const ids = deletableSlots.map((s) => s.id);
-    const uniqueUrls = [...new Set(deletableSlots.flatMap((s) => s.place_image_urls))];
-    if (uniqueUrls.length > 0) await removeStorageFiles(uniqueUrls);
     const { error: err } = await supabase.from("availability_slots").delete().in("id", ids);
     if (err) {
       setError(err.message);
