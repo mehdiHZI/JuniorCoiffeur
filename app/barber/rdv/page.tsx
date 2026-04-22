@@ -17,6 +17,7 @@ type RdvRow = {
   clientName: string;
   clientPhone: string;
   prestationTitle: string | null;
+  prestationPoints: number;
 };
 
 export default function BarberRdvPage() {
@@ -27,6 +28,7 @@ export default function BarberRdvPage() {
   const [cancelModalRdv, setCancelModalRdv] = useState<RdvRow | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling] = useState(false);
+  const [processingBookingId, setProcessingBookingId] = useState<number | null>(null);
 
   const loadRdv = async () => {
     const { data: authData } = await supabase.auth.getUser();
@@ -125,14 +127,18 @@ export default function BarberRdvPage() {
     });
 
     const prestationIds = [...new Set((bookings as { prestation_id: number | null }[]).map((b) => b.prestation_id).filter(Boolean))] as number[];
-    let prestationMap: Record<number, string> = {};
+    let prestationMap: Record<number, { title: string; points: number }> = {};
     if (prestationIds.length > 0) {
       const { data: prestations } = await supabase
         .from("prestations")
-        .select("id, title")
+        .select("id, title, price_points")
         .in("id", prestationIds);
       (prestations ?? []).forEach((p) => {
-        prestationMap[(p as { id: number }).id] = (p as { title: string }).title;
+        const id = (p as { id: number }).id;
+        prestationMap[id] = {
+          title: (p as { title: string }).title,
+          points: Number((p as { price_points: number | null }).price_points ?? 0),
+        };
       });
     }
 
@@ -150,7 +156,8 @@ export default function BarberRdvPage() {
         place_image_urls: slot?.place_image_urls ?? [],
         clientName: userInfo?.name ?? "Client",
         clientPhone: userInfo?.phone ?? "",
-        prestationTitle: b.prestation_id ? (prestationMap[b.prestation_id] ?? null) : null,
+        prestationTitle: b.prestation_id ? (prestationMap[b.prestation_id]?.title ?? null) : null,
+        prestationPoints: b.prestation_id ? (prestationMap[b.prestation_id]?.points ?? 0) : 0,
       };
     });
 
@@ -202,6 +209,58 @@ export default function BarberRdvPage() {
     setCancelReason("");
     await loadRdv();
     setCancelling(false);
+  };
+
+  const handleMarkAttendance = async (rdv: RdvRow, status: "arrived" | "no_show") => {
+    setProcessingBookingId(rdv.id);
+    setError(null);
+    const { data: authData } = await supabase.auth.getUser();
+    const user = authData.user;
+    if (!user) {
+      setProcessingBookingId(null);
+      return;
+    }
+
+    const points = Math.max(0, Number(rdv.prestationPoints || 0));
+    const signedPoints = status === "arrived" ? points : -points;
+
+    const { error: outcomeErr } = await supabase.from("booking_outcomes").insert({
+      booking_id: rdv.id,
+      slot_id: rdv.slot_id,
+      customer_id: rdv.customer_id,
+      barber_user_id: user.id,
+      prestation_points: points,
+      status,
+    });
+    if (outcomeErr) {
+      setError(outcomeErr.message);
+      setProcessingBookingId(null);
+      return;
+    }
+
+    if (signedPoints !== 0) {
+      const { error: txErr } = await supabase.from("transactions").insert({
+        customer_id: rdv.customer_id,
+        points: signedPoints,
+        barber_user_id: user.id,
+        shop_item_id: null,
+      });
+      if (txErr) {
+        setError(txErr.message);
+        setProcessingBookingId(null);
+        return;
+      }
+    }
+
+    const { error: deleteErr } = await supabase.from("bookings").delete().eq("id", rdv.id);
+    if (deleteErr) {
+      setError(deleteErr.message);
+      setProcessingBookingId(null);
+      return;
+    }
+
+    await loadRdv();
+    setProcessingBookingId(null);
   };
 
   const containerStyle: React.CSSProperties = {
@@ -283,7 +342,7 @@ export default function BarberRdvPage() {
                 </div>
                 {rdv.prestationTitle && (
                   <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "4px" }}>
-                    Prestation : {rdv.prestationTitle}
+                    Prestation : {rdv.prestationTitle} — {rdv.prestationPoints} points
                   </div>
                 )}
                 {rdv.address?.trim() && (
@@ -299,6 +358,40 @@ export default function BarberRdvPage() {
                     ))}
                   </div>
                 )}
+                <div style={{ display: "flex", gap: "8px", marginTop: "10px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    disabled={processingBookingId === rdv.id || cancelling}
+                    onClick={() => handleMarkAttendance(rdv, "arrived")}
+                    style={{
+                      fontSize: "12px",
+                      color: "#166534",
+                      background: "#dcfce7",
+                      border: "1px solid #bbf7d0",
+                      borderRadius: "9999px",
+                      padding: "6px 10px",
+                      cursor: processingBookingId === rdv.id ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {processingBookingId === rdv.id ? "Traitement..." : "Client venu (+points)"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={processingBookingId === rdv.id || cancelling}
+                    onClick={() => handleMarkAttendance(rdv, "no_show")}
+                    style={{
+                      fontSize: "12px",
+                      color: "#b91c1c",
+                      background: "#fee2e2",
+                      border: "1px solid #fecaca",
+                      borderRadius: "9999px",
+                      padding: "6px 10px",
+                      cursor: processingBookingId === rdv.id ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {processingBookingId === rdv.id ? "Traitement..." : "Client absent (-points)"}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
