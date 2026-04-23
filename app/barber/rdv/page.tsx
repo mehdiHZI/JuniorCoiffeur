@@ -46,13 +46,10 @@ export default function BarberRdvPage() {
       return;
     }
 
-    const today = new Date().toISOString().slice(0, 10);
-
     const { data: slots, error: slotsErr } = await supabase
       .from("availability_slots")
       .select("id, slot_date, start_time, end_time, address, place_image_urls")
       .eq("created_by", authData.user.id)
-      .gte("slot_date", today)
       .order("slot_date", { ascending: true })
       .order("start_time", { ascending: true });
 

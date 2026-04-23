@@ -117,8 +117,13 @@ export default function BarberReservationPage() {
       }
     }
     if (pastIds.length) {
-      // Les photos du lieu sont permanentes : on nettoie les lignes de créneaux passés, jamais les fichiers image.
-      await supabase.from("availability_slots").delete().in("id", pastIds);
+      const { data: pastBooked } = await supabase.from("bookings").select("slot_id").in("slot_id", pastIds);
+      const bookedPastIds = new Set((pastBooked ?? []).map((b: { slot_id: number }) => b.slot_id));
+      const pastIdsToDelete = pastIds.filter((id) => !bookedPastIds.has(id));
+      if (pastIdsToDelete.length > 0) {
+        // Les photos du lieu sont permanentes : on nettoie les lignes de créneaux passés non réservés, jamais les fichiers image.
+        await supabase.from("availability_slots").delete().in("id", pastIdsToDelete);
+      }
     }
 
     const slotList: Slot[] = all
