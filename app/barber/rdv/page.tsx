@@ -29,6 +29,12 @@ export default function BarberRdvPage() {
   const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling] = useState(false);
   const [processingBookingId, setProcessingBookingId] = useState<number | null>(null);
+  /** Modale « venu / absent » : montant modifiable, défaut = points de la prestation. */
+  const [attendanceModal, setAttendanceModal] = useState<{
+    rdv: RdvRow;
+    status: "arrived" | "no_show";
+  } | null>(null);
+  const [attendancePointsInput, setAttendancePointsInput] = useState("");
 
   const loadRdv = async () => {
     const { data: authData } = await supabase.auth.getUser();
@@ -208,7 +214,38 @@ export default function BarberRdvPage() {
     setCancelling(false);
   };
 
-  const handleMarkAttendance = async (rdv: RdvRow, status: "arrived" | "no_show") => {
+  const suggestedPointMagnitudes = (basePrestationPoints: number): number[] => {
+    const b = Math.max(0, Math.floor(Number(basePrestationPoints) || 0));
+    const set = new Set<number>();
+    if (b > 0) {
+      set.add(b);
+      const half = Math.max(1, Math.floor(b / 2));
+      if (half !== b) set.add(half);
+      set.add(b * 2);
+    } else {
+      [5, 10, 15, 20].forEach((n) => set.add(n));
+    }
+    return [...set].filter((n) => n > 0 && n <= 100_000).sort((a, c) => a - c);
+  };
+
+  const openAttendanceModal = (rdv: RdvRow, status: "arrived" | "no_show") => {
+    setError(null);
+    const basePts = Math.max(0, Math.floor(Number(rdv.prestationPoints) || 0));
+    const fallback = suggestedPointMagnitudes(0)[0] ?? 5;
+    setAttendancePointsInput(String(basePts > 0 ? basePts : fallback));
+    setAttendanceModal({ rdv, status });
+  };
+
+  const handleConfirmAttendance = async () => {
+    if (!attendanceModal) return;
+    const { rdv, status } = attendanceModal;
+    const raw = attendancePointsInput.replace(/\D/g, "");
+    const magnitude = parseInt(raw, 10);
+    if (!Number.isFinite(magnitude) || magnitude <= 0) {
+      setError("Indique un nombre entier de points supérieur à 0.");
+      return;
+    }
+
     setProcessingBookingId(rdv.id);
     setError(null);
     const { data: authData } = await supabase.auth.getUser();
@@ -218,7 +255,7 @@ export default function BarberRdvPage() {
       return;
     }
 
-    const points = Math.max(0, Number(rdv.prestationPoints || 0));
+    const points = magnitude;
     const signedPoints = status === "arrived" ? points : -points;
 
     const { error: outcomeErr } = await supabase.from("booking_outcomes").insert({
@@ -258,6 +295,8 @@ export default function BarberRdvPage() {
 
     await loadRdv();
     setProcessingBookingId(null);
+    setAttendanceModal(null);
+    setAttendancePointsInput("");
   };
 
   const containerStyle: React.CSSProperties = {
@@ -358,8 +397,8 @@ export default function BarberRdvPage() {
                 <div style={{ display: "flex", gap: "8px", marginTop: "10px", flexWrap: "wrap" }}>
                   <button
                     type="button"
-                    disabled={processingBookingId === rdv.id || cancelling}
-                    onClick={() => handleMarkAttendance(rdv, "arrived")}
+                    disabled={processingBookingId === rdv.id || cancelling || !!attendanceModal}
+                    onClick={() => openAttendanceModal(rdv, "arrived")}
                     style={{
                       fontSize: "12px",
                       color: "#166534",
@@ -374,8 +413,8 @@ export default function BarberRdvPage() {
                   </button>
                   <button
                     type="button"
-                    disabled={processingBookingId === rdv.id || cancelling}
-                    onClick={() => handleMarkAttendance(rdv, "no_show")}
+                    disabled={processingBookingId === rdv.id || cancelling || !!attendanceModal}
+                    onClick={() => openAttendanceModal(rdv, "no_show")}
                     style={{
                       fontSize: "12px",
                       color: "#b91c1c",
@@ -392,6 +431,124 @@ export default function BarberRdvPage() {
               </li>
             ))}
           </ul>
+        )}
+
+        {attendanceModal && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              backgroundColor: "rgba(0,0,0,0.4)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 55,
+              padding: "16px",
+            }}
+            onClick={() => !processingBookingId && setAttendanceModal(null)}
+          >
+            <div
+              style={{
+                backgroundColor: "#fff",
+                borderRadius: "16px",
+                padding: "24px",
+                maxWidth: "400px",
+                width: "100%",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 style={{ fontSize: "18px", fontWeight: 600, marginBottom: "8px", color: "#111" }}>
+                {attendanceModal.status === "arrived" ? "Créditer des points" : "Retirer des points"}
+              </h3>
+              <p style={{ fontSize: "14px", color: "#4b5563", marginBottom: "12px" }}>
+                {attendanceModal.status === "arrived"
+                  ? "Par défaut : les points de la prestation (tu peux ajuster si besoin)."
+                  : "Par défaut : les points de la prestation seront retirés (tu peux ajuster)."}
+              </p>
+              {attendanceModal.rdv.prestationTitle && (
+                <p style={{ fontSize: "13px", color: "#6b7280", marginBottom: "12px" }}>
+                  {attendanceModal.rdv.prestationTitle} — montant prévu (prestation) :{" "}
+                  <strong>{attendanceModal.rdv.prestationPoints} pts</strong>
+                </p>
+              )}
+              <label style={{ display: "block", fontSize: "14px", fontWeight: 500, marginBottom: "6px", color: "#374151" }}>
+                Nombre de points
+              </label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
+                {suggestedPointMagnitudes(attendanceModal.rdv.prestationPoints).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    disabled={!!processingBookingId}
+                    onClick={() => setAttendancePointsInput(String(n))}
+                    style={{
+                      fontSize: "13px",
+                      padding: "6px 12px",
+                      borderRadius: "9999px",
+                      border:
+                        attendancePointsInput === String(n)
+                          ? "2px solid #111"
+                          : "1px solid #d1d5db",
+                      background: attendancePointsInput === String(n) ? "#f3f4f6" : "#fff",
+                      cursor: processingBookingId ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {n} pts
+                  </button>
+                ))}
+              </div>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="off"
+                value={attendancePointsInput}
+                onChange={(e) => setAttendancePointsInput(e.target.value.replace(/\D/g, ""))}
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  padding: "10px 12px",
+                  borderRadius: "10px",
+                  border: "1px solid #d1d5db",
+                  marginBottom: "16px",
+                  fontSize: "15px",
+                }}
+              />
+              <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => !processingBookingId && setAttendanceModal(null)}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: "10px",
+                    border: "1px solid #d1d5db",
+                    background: "#fff",
+                    fontSize: "14px",
+                    cursor: processingBookingId ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmAttendance}
+                  disabled={!!processingBookingId}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: "10px",
+                    border: "none",
+                    background: attendanceModal.status === "arrived" ? "#166534" : "#b91c1c",
+                    color: "#fff",
+                    fontSize: "14px",
+                    cursor: processingBookingId ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {processingBookingId ? "Enregistrement..." : attendanceModal.status === "arrived" ? "Confirmer (+)" : "Confirmer (−)"}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {cancelModalRdv && (
