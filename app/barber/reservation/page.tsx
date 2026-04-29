@@ -68,6 +68,9 @@ export default function BarberReservationPage() {
   const [endTime, setEndTime] = useState("12:00");
   const [address, setAddress] = useState("");
   const [placeImageFiles, setPlaceImageFiles] = useState<File[]>([]);
+  const [existingPlaceImageUrls, setExistingPlaceImageUrls] = useState<string[]>([]);
+  const [selectedExistingPlaceImageUrls, setSelectedExistingPlaceImageUrls] = useState<string[]>([]);
+  const [loadingExistingPlaceImages, setLoadingExistingPlaceImages] = useState(false);
   const placeImagePreviews = useMemo(() => placeImageFiles.map((f) => URL.createObjectURL(f)), [placeImageFiles]);
   useEffect(() => {
     return () => {
@@ -80,6 +83,35 @@ export default function BarberReservationPage() {
   const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling] = useState(false);
   const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
+
+  const loadExistingPlaceImages = async (uid: string) => {
+    setLoadingExistingPlaceImages(true);
+    const collectedPaths: string[] = [];
+    let offset = 0;
+    const pageSize = 100;
+    while (true) {
+      const { data, error: listErr } = await supabase.storage
+        .from(SLOT_PLACE_IMAGES_BUCKET)
+        .list(uid, { limit: pageSize, offset, sortBy: { column: "created_at", order: "desc" } });
+      if (listErr) {
+        setError(`Impossible de charger les images existantes: ${listErr.message}`);
+        break;
+      }
+      const files = (data ?? []).filter((entry) => {
+        const name = String((entry as { name?: string }).name ?? "");
+        return !!name && !name.endsWith("/");
+      });
+      for (const file of files) {
+        const name = (file as { name: string }).name;
+        collectedPaths.push(`${uid}/${name}`);
+      }
+      if (!data || data.length < pageSize) break;
+      offset += pageSize;
+    }
+    const urls = collectedPaths.map((path) => supabase.storage.from(SLOT_PLACE_IMAGES_BUCKET).getPublicUrl(path).data.publicUrl);
+    setExistingPlaceImageUrls(urls);
+    setLoadingExistingPlaceImages(false);
+  };
 
   const loadSlots = async () => {
     const { data: authData } = await supabase.auth.getUser();
@@ -224,6 +256,7 @@ export default function BarberReservationPage() {
         router.push("/barber");
         return;
       }
+      await loadExistingPlaceImages(authData.user.id);
       await loadSlots();
       setLoading(false);
     };
@@ -274,7 +307,16 @@ export default function BarberReservationPage() {
     }
     const addr = address.trim() || null;
     let imageUrls: string[] = [];
+    const selectedExisting = selectedExistingPlaceImageUrls.slice(0, MAX_PLACE_IMAGES);
+    if (selectedExisting.length > 0) {
+      imageUrls = [...selectedExisting];
+    }
     if (placeImageFiles.length > 0) {
+      if (imageUrls.length + placeImageFiles.length > MAX_PLACE_IMAGES) {
+        setError(`Tu peux sélectionner au maximum ${MAX_PLACE_IMAGES} images au total.`);
+        setSaving(false);
+        return;
+      }
       const uid = authData.user!.id;
       const stamp = Date.now();
       for (let i = 0; i < placeImageFiles.length; i++) {
@@ -320,6 +362,8 @@ export default function BarberReservationPage() {
     setEndTime("12:00");
     setAddress("");
     setPlaceImageFiles([]);
+    setSelectedExistingPlaceImageUrls([]);
+    await loadExistingPlaceImages(authData.user!.id);
     await loadSlots();
     setSaving(false);
   };
@@ -543,6 +587,61 @@ export default function BarberReservationPage() {
         <p style={{ fontSize: "12px", color: "#6b7280", marginBottom: "8px" }}>
           Aide les clients à repérer le salon ou le lieu exact du rendez-vous.
         </p>
+        <p style={{ fontSize: "12px", color: "#6b7280", marginBottom: "8px" }}>
+          Tu peux soit sélectionner des photos déjà enregistrées, soit en ajouter de nouvelles.
+        </p>
+        <label style={{ display: "block", fontSize: "13px", fontWeight: 500, marginBottom: "6px", color: "#374151" }}>
+          Photos déjà enregistrées
+        </label>
+        {loadingExistingPlaceImages ? (
+          <p style={{ fontSize: "12px", color: "#6b7280", marginBottom: "10px" }}>Chargement des images...</p>
+        ) : existingPlaceImageUrls.length === 0 ? (
+          <p style={{ fontSize: "12px", color: "#6b7280", marginBottom: "10px" }}>Aucune image enregistrée pour le moment.</p>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
+            {existingPlaceImageUrls.map((url) => {
+              const selected = selectedExistingPlaceImageUrls.includes(url);
+              const maxReached = selectedExistingPlaceImageUrls.length + placeImageFiles.length >= MAX_PLACE_IMAGES;
+              const disableSelect = !selected && maxReached;
+              return (
+                <button
+                  key={url}
+                  type="button"
+                  disabled={disableSelect}
+                  onClick={() =>
+                    setSelectedExistingPlaceImageUrls((prev) => {
+                      if (prev.includes(url)) return prev.filter((u) => u !== url);
+                      if (prev.length + placeImageFiles.length >= MAX_PLACE_IMAGES) return prev;
+                      return [...prev, url];
+                    })
+                  }
+                  style={{
+                    borderRadius: "10px",
+                    border: selected ? "2px solid #111" : "1px solid #d1d5db",
+                    background: selected ? "#f3f4f6" : "#fff",
+                    padding: "2px",
+                    cursor: disableSelect ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={url}
+                    alt=""
+                    style={{ width: "64px", height: "64px", objectFit: "cover", borderRadius: "8px", opacity: disableSelect ? 0.45 : 1 }}
+                  />
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {selectedExistingPlaceImageUrls.length > 0 && (
+          <p style={{ fontSize: "12px", color: "#374151", marginBottom: "8px" }}>
+            {selectedExistingPlaceImageUrls.length} image(s) existante(s) sélectionnée(s)
+          </p>
+        )}
+        <label style={{ display: "block", fontSize: "13px", fontWeight: 500, marginBottom: "6px", color: "#374151" }}>
+          Ajouter de nouvelles photos
+        </label>
         <input
           type="file"
           accept="image/*"
@@ -550,7 +649,10 @@ export default function BarberReservationPage() {
           onChange={(e) => {
             const picked = Array.from(e.target.files ?? []);
             e.target.value = "";
-            setPlaceImageFiles((prev) => [...prev, ...picked].slice(0, MAX_PLACE_IMAGES));
+            setPlaceImageFiles((prev) => {
+              const room = Math.max(0, MAX_PLACE_IMAGES - selectedExistingPlaceImageUrls.length);
+              return [...prev, ...picked].slice(0, room);
+            });
           }}
           style={{ marginBottom: "10px", fontSize: "14px", width: "100%" }}
         />
