@@ -4,17 +4,30 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
+type RangeOption = 7 | 30 | 90;
 type DayPoint = { label: string; booked: number; cancelled: number; arrived: number; noShow: number };
+type Kpi = { label: string; value: number; accent: string; delta?: number };
+type PointBucket = { points: number; count: number };
+
 type StatsState = {
   totalCustomers: number;
   totalSlots: number;
-  activeBookings: number;
-  cancelledBookings: number;
-  arrivedBookings: number;
-  noShowBookings: number;
+  bookedInRange: number;
+  cancelledInRange: number;
+  arrivedInRange: number;
+  noShowInRange: number;
+  pointsAdded: number;
+  pointsRemoved: number;
+  showRate: number;
+  cancelRate: number;
+  noShowRate: number;
+  busiestWeekday: string;
+  busiestHour: string;
+  prestationPointBuckets: PointBucket[];
 };
 
-const DAY_WINDOW = 14;
+const RANGE_OPTIONS: RangeOption[] = [7, 30, 90];
+const WEEKDAY_FR = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
 
 function toDateKey(date: Date): string {
   const y = date.getFullYear();
@@ -34,34 +47,81 @@ function buildWindowKeys(days: number): string[] {
   return keys;
 }
 
+function periodBounds(days: number) {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - (days - 1));
+
+  const prevEnd = new Date(start);
+  prevEnd.setDate(start.getDate() - 1);
+  const prevStart = new Date(prevEnd);
+  prevStart.setDate(prevEnd.getDate() - (days - 1));
+
+  return {
+    startIso: `${toDateKey(start)}T00:00:00.000Z`,
+    endIso: `${toDateKey(end)}T23:59:59.999Z`,
+    prevStartIso: `${toDateKey(prevStart)}T00:00:00.000Z`,
+    prevEndIso: `${toDateKey(prevEnd)}T23:59:59.999Z`,
+  };
+}
+
+function percentDelta(current: number, previous: number): number | undefined {
+  if (previous <= 0) return undefined;
+  return ((current - previous) / previous) * 100;
+}
+
+function safeRate(numerator: number, denominator: number): number {
+  if (denominator <= 0) return 0;
+  return (numerator / denominator) * 100;
+}
+
+function csvEscape(value: string | number): string {
+  const s = String(value ?? "");
+  if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
 export default function BarberStatsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [rangeDays, setRangeDays] = useState<RangeOption>(30);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<StatsState>({
     totalCustomers: 0,
     totalSlots: 0,
-    activeBookings: 0,
-    cancelledBookings: 0,
-    arrivedBookings: 0,
-    noShowBookings: 0,
+    bookedInRange: 0,
+    cancelledInRange: 0,
+    arrivedInRange: 0,
+    noShowInRange: 0,
+    pointsAdded: 0,
+    pointsRemoved: 0,
+    showRate: 0,
+    cancelRate: 0,
+    noShowRate: 0,
+    busiestWeekday: "-",
+    busiestHour: "-",
+    prestationPointBuckets: [],
   });
   const [daily, setDaily] = useState<DayPoint[]>([]);
+  const [kpiDeltas, setKpiDeltas] = useState<Record<string, number | undefined>>({});
 
-  const kpiCards = useMemo(
+  const kpiCards = useMemo<Kpi[]>(
     () => [
       { label: "Clients enregistrés", value: stats.totalCustomers, accent: "#111827" },
-      { label: "RDV pris (total)", value: stats.activeBookings + stats.cancelledBookings + stats.arrivedBookings + stats.noShowBookings, accent: "#0f766e" },
-      { label: "RDV en attente", value: stats.activeBookings, accent: "#1d4ed8" },
-      { label: "RDV annulés", value: stats.cancelledBookings, accent: "#b91c1c" },
-      { label: "Clients venus", value: stats.arrivedBookings, accent: "#166534" },
-      { label: "Clients absents", value: stats.noShowBookings, accent: "#92400e" },
+      { label: "RDV pris", value: stats.bookedInRange, accent: "#0f766e", delta: kpiDeltas.booked },
+      { label: "RDV annulés", value: stats.cancelledInRange, accent: "#b91c1c", delta: kpiDeltas.cancelled },
+      { label: "Clients venus", value: stats.arrivedInRange, accent: "#166534", delta: kpiDeltas.arrived },
+      { label: "Clients absents", value: stats.noShowInRange, accent: "#92400e", delta: kpiDeltas.noShow },
+      { label: "Points ajoutés", value: stats.pointsAdded, accent: "#1d4ed8", delta: kpiDeltas.pointsAdded },
+      { label: "Points retirés", value: stats.pointsRemoved, accent: "#7c2d12", delta: kpiDeltas.pointsRemoved },
     ],
-    [stats]
+    [stats, kpiDeltas]
   );
 
-  const loadStats = async () => {
+  const loadStats = async (days: RangeOption) => {
     const { data: authData } = await supabase.auth.getUser();
     const user = authData.user;
     if (!user) {
@@ -76,22 +136,33 @@ export default function BarberStatsPage() {
     }
 
     setError(null);
+    const bounds = periodBounds(days);
+    const keys = buildWindowKeys(days);
+    const dayAgg: Record<string, DayPoint> = {};
+    keys.forEach((k) => {
+      dayAgg[k] = { label: k.slice(5), booked: 0, cancelled: 0, arrived: 0, noShow: 0 };
+    });
 
+    // Charger les créneaux du coiffeur (id + horaire + date), pagination par sécurité.
+    const slotMap: Record<number, { slot_date: string; start_time: string }> = {};
     const slotIds: number[] = [];
     let offset = 0;
     const pageSize = 1000;
     while (true) {
       const { data, error: slotErr } = await supabase
         .from("availability_slots")
-        .select("id")
+        .select("id, slot_date, start_time")
         .eq("created_by", user.id)
         .range(offset, offset + pageSize - 1);
       if (slotErr) {
         setError(slotErr.message);
         return;
       }
-      const chunk = (data ?? []) as { id: number }[];
-      slotIds.push(...chunk.map((s) => s.id));
+      const chunk = (data ?? []) as { id: number; slot_date: string; start_time: string }[];
+      chunk.forEach((s) => {
+        slotIds.push(s.id);
+        slotMap[s.id] = { slot_date: s.slot_date, start_time: s.start_time };
+      });
       if (chunk.length < pageSize) break;
       offset += pageSize;
     }
@@ -105,100 +176,209 @@ export default function BarberStatsPage() {
       .eq("created_by", user.id);
     if (slotsCountErr) return void setError(slotsCountErr.message);
 
-    let activeBookings = 0;
+    let bookedInRange = 0;
+    let bookedPrev = 0;
+    const weekdayCounts: Record<string, number> = {};
+    const hourCounts: Record<string, number> = {};
+
     if (slotIds.length > 0) {
-      const { count: activeCount, error: activeErr } = await supabase
+      const { data: bookingRows, error: bookingErr } = await supabase
+        .from("bookings")
+        .select("slot_id, created_at")
+        .in("slot_id", slotIds)
+        .gte("created_at", bounds.startIso)
+        .lte("created_at", bounds.endIso);
+      if (bookingErr) return void setError(bookingErr.message);
+      bookedInRange = (bookingRows ?? []).length;
+      (bookingRows ?? []).forEach((row) => {
+        const r = row as { slot_id: number; created_at: string };
+        const key = String(r.created_at ?? "").slice(0, 10);
+        if (dayAgg[key]) dayAgg[key].booked += 1;
+
+        const slot = slotMap[r.slot_id];
+        if (slot) {
+          const [y, m, d] = slot.slot_date.split("-").map(Number);
+          const weekday = WEEKDAY_FR[new Date(y, m - 1, d).getDay()];
+          const hour = String(slot.start_time).slice(0, 2) + "h";
+          weekdayCounts[weekday] = (weekdayCounts[weekday] ?? 0) + 1;
+          hourCounts[hour] = (hourCounts[hour] ?? 0) + 1;
+        }
+      });
+
+      const { count: bookedPrevCount, error: bookedPrevErr } = await supabase
         .from("bookings")
         .select("*", { head: true, count: "exact" })
-        .in("slot_id", slotIds);
-      if (activeErr) return void setError(activeErr.message);
-      activeBookings = Number(activeCount ?? 0);
-    }
-
-    const { count: cancelledCount, error: cancelledErr } = await supabase
-      .from("booking_cancellations")
-      .select("*", { head: true, count: "exact" })
-      .eq("cancelled_by", user.id);
-    if (cancelledErr) return void setError(cancelledErr.message);
-
-    const { count: arrivedCount, error: arrivedErr } = await supabase
-      .from("booking_outcomes")
-      .select("*", { head: true, count: "exact" })
-      .eq("barber_user_id", user.id)
-      .eq("status", "arrived");
-    if (arrivedErr) return void setError(arrivedErr.message);
-
-    const { count: noShowCount, error: noShowErr } = await supabase
-      .from("booking_outcomes")
-      .select("*", { head: true, count: "exact" })
-      .eq("barber_user_id", user.id)
-      .eq("status", "no_show");
-    if (noShowErr) return void setError(noShowErr.message);
-
-    const windowKeys = buildWindowKeys(DAY_WINDOW);
-    const since = `${windowKeys[0]}T00:00:00.000Z`;
-    const dayAgg: Record<string, DayPoint> = {};
-    windowKeys.forEach((k) => (dayAgg[k] = { label: k.slice(5), booked: 0, cancelled: 0, arrived: 0, noShow: 0 }));
-
-    if (slotIds.length > 0) {
-      const { data: bookingRows, error: bookingRowsErr } = await supabase
-        .from("bookings")
-        .select("created_at")
         .in("slot_id", slotIds)
-        .gte("created_at", since);
-      if (bookingRowsErr) return void setError(bookingRowsErr.message);
-      (bookingRows ?? []).forEach((row) => {
-        const key = String((row as { created_at: string }).created_at ?? "").slice(0, 10);
-        if (dayAgg[key]) dayAgg[key].booked += 1;
-      });
+        .gte("created_at", bounds.prevStartIso)
+        .lte("created_at", bounds.prevEndIso);
+      if (bookedPrevErr) return void setError(bookedPrevErr.message);
+      bookedPrev = Number(bookedPrevCount ?? 0);
     }
 
-    const { data: cancelRows, error: cancelRowsErr } = await supabase
+    const { data: cancelRows, error: cancelErr } = await supabase
       .from("booking_cancellations")
-      .select("cancelled_at")
+      .select("slot_id, cancelled_at")
       .eq("cancelled_by", user.id)
-      .gte("cancelled_at", since);
-    if (cancelRowsErr) return void setError(cancelRowsErr.message);
+      .gte("cancelled_at", bounds.startIso)
+      .lte("cancelled_at", bounds.endIso);
+    if (cancelErr) return void setError(cancelErr.message);
+    const cancelledInRange = (cancelRows ?? []).length;
     (cancelRows ?? []).forEach((row) => {
       const key = String((row as { cancelled_at: string }).cancelled_at ?? "").slice(0, 10);
       if (dayAgg[key]) dayAgg[key].cancelled += 1;
     });
+    const { count: cancelledPrev, error: cancelledPrevErr } = await supabase
+      .from("booking_cancellations")
+      .select("*", { head: true, count: "exact" })
+      .eq("cancelled_by", user.id)
+      .gte("cancelled_at", bounds.prevStartIso)
+      .lte("cancelled_at", bounds.prevEndIso);
+    if (cancelledPrevErr) return void setError(cancelledPrevErr.message);
 
-    const { data: outcomeRows, error: outcomeRowsErr } = await supabase
+    const { data: outcomeRows, error: outcomeErr } = await supabase
       .from("booking_outcomes")
-      .select("status, created_at")
+      .select("slot_id, status, prestation_points, created_at")
       .eq("barber_user_id", user.id)
-      .gte("created_at", since);
-    if (outcomeRowsErr) return void setError(outcomeRowsErr.message);
+      .gte("created_at", bounds.startIso)
+      .lte("created_at", bounds.endIso);
+    if (outcomeErr) return void setError(outcomeErr.message);
+    let arrivedInRange = 0;
+    let noShowInRange = 0;
+    const pointBuckets: Record<number, number> = {};
     (outcomeRows ?? []).forEach((row) => {
-      const r = row as { status: "arrived" | "no_show"; created_at: string };
+      const r = row as { slot_id: number; status: "arrived" | "no_show"; prestation_points: number; created_at: string };
       const key = String(r.created_at ?? "").slice(0, 10);
-      if (!dayAgg[key]) return;
-      if (r.status === "arrived") dayAgg[key].arrived += 1;
-      if (r.status === "no_show") dayAgg[key].noShow += 1;
+      if (r.status === "arrived") {
+        arrivedInRange += 1;
+        if (dayAgg[key]) dayAgg[key].arrived += 1;
+      } else {
+        noShowInRange += 1;
+        if (dayAgg[key]) dayAgg[key].noShow += 1;
+      }
+      const pts = Math.max(0, Number(r.prestation_points || 0));
+      if (pts > 0) pointBuckets[pts] = (pointBuckets[pts] ?? 0) + 1;
+    });
+
+    const { count: arrivedPrev, error: arrivedPrevErr } = await supabase
+      .from("booking_outcomes")
+      .select("*", { head: true, count: "exact" })
+      .eq("barber_user_id", user.id)
+      .eq("status", "arrived")
+      .gte("created_at", bounds.prevStartIso)
+      .lte("created_at", bounds.prevEndIso);
+    if (arrivedPrevErr) return void setError(arrivedPrevErr.message);
+    const { count: noShowPrev, error: noShowPrevErr } = await supabase
+      .from("booking_outcomes")
+      .select("*", { head: true, count: "exact" })
+      .eq("barber_user_id", user.id)
+      .eq("status", "no_show")
+      .gte("created_at", bounds.prevStartIso)
+      .lte("created_at", bounds.prevEndIso);
+    if (noShowPrevErr) return void setError(noShowPrevErr.message);
+
+    const { data: txRows, error: txErr } = await supabase
+      .from("transactions")
+      .select("points")
+      .eq("barber_user_id", user.id)
+      .gte("created_at", bounds.startIso)
+      .lte("created_at", bounds.endIso);
+    if (txErr) return void setError(txErr.message);
+    let pointsAdded = 0;
+    let pointsRemoved = 0;
+    (txRows ?? []).forEach((row) => {
+      const p = Number((row as { points: number }).points ?? 0);
+      if (p > 0) pointsAdded += p;
+      if (p < 0) pointsRemoved += Math.abs(p);
+    });
+
+    const { data: txPrevRows, error: txPrevErr } = await supabase
+      .from("transactions")
+      .select("points")
+      .eq("barber_user_id", user.id)
+      .gte("created_at", bounds.prevStartIso)
+      .lte("created_at", bounds.prevEndIso);
+    if (txPrevErr) return void setError(txPrevErr.message);
+    let pointsAddedPrev = 0;
+    let pointsRemovedPrev = 0;
+    (txPrevRows ?? []).forEach((row) => {
+      const p = Number((row as { points: number }).points ?? 0);
+      if (p > 0) pointsAddedPrev += p;
+      if (p < 0) pointsRemovedPrev += Math.abs(p);
+    });
+
+    const busiestWeekday = Object.entries(weekdayCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "-";
+    const busiestHour = Object.entries(hourCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "-";
+    const totalClosed = arrivedInRange + noShowInRange;
+
+    setKpiDeltas({
+      booked: percentDelta(bookedInRange, bookedPrev),
+      cancelled: percentDelta(cancelledInRange, Number(cancelledPrev ?? 0)),
+      arrived: percentDelta(arrivedInRange, Number(arrivedPrev ?? 0)),
+      noShow: percentDelta(noShowInRange, Number(noShowPrev ?? 0)),
+      pointsAdded: percentDelta(pointsAdded, pointsAddedPrev),
+      pointsRemoved: percentDelta(pointsRemoved, pointsRemovedPrev),
     });
 
     setStats({
       totalCustomers: Number(totalCustomers ?? 0),
       totalSlots: Number(totalSlots ?? 0),
-      activeBookings,
-      cancelledBookings: Number(cancelledCount ?? 0),
-      arrivedBookings: Number(arrivedCount ?? 0),
-      noShowBookings: Number(noShowCount ?? 0),
+      bookedInRange,
+      cancelledInRange,
+      arrivedInRange,
+      noShowInRange,
+      pointsAdded,
+      pointsRemoved,
+      showRate: safeRate(arrivedInRange, totalClosed),
+      cancelRate: safeRate(cancelledInRange, bookedInRange),
+      noShowRate: safeRate(noShowInRange, totalClosed),
+      busiestWeekday,
+      busiestHour,
+      prestationPointBuckets: Object.entries(pointBuckets)
+        .map(([points, count]) => ({ points: Number(points), count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5),
     });
-    setDaily(windowKeys.map((k) => dayAgg[k]));
+    setDaily(keys.map((k) => dayAgg[k]));
   };
 
   useEffect(() => {
     const run = async () => {
-      await loadStats();
+      await loadStats(rangeDays);
       setLoading(false);
     };
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]);
+  }, [router, rangeDays]);
 
   const maxForGraph = Math.max(1, ...daily.map((d) => Math.max(d.booked, d.cancelled, d.arrived, d.noShow)));
+
+  const exportCsv = () => {
+    const lines: string[] = [];
+    lines.push("Periode (jours),Valeur");
+    lines.push(`${rangeDays},${rangeDays}`);
+    lines.push(`Clients enregistres,${stats.totalCustomers}`);
+    lines.push(`RDV pris (${rangeDays}j),${stats.bookedInRange}`);
+    lines.push(`RDV annules (${rangeDays}j),${stats.cancelledInRange}`);
+    lines.push(`Clients venus (${rangeDays}j),${stats.arrivedInRange}`);
+    lines.push(`Clients absents (${rangeDays}j),${stats.noShowInRange}`);
+    lines.push(`Points ajoutes (${rangeDays}j),${stats.pointsAdded}`);
+    lines.push(`Points retires (${rangeDays}j),${stats.pointsRemoved}`);
+    lines.push(`Show rate (%),${stats.showRate.toFixed(1)}`);
+    lines.push(`Cancel rate (%),${stats.cancelRate.toFixed(1)}`);
+    lines.push(`No-show rate (%),${stats.noShowRate.toFixed(1)}`);
+    lines.push("");
+    lines.push("Jour,RDV pris,RDV annules,Clients venus,Clients absents");
+    daily.forEach((d) => {
+      lines.push([csvEscape(d.label), d.booked, d.cancelled, d.arrived, d.noShow].join(","));
+    });
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `stats-barber-${rangeDays}j.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const containerStyle: React.CSSProperties = {
     minHeight: "100vh",
@@ -208,7 +388,7 @@ export default function BarberStatsPage() {
     fontFamily: "'Helvetica Neue', Arial, sans-serif",
   };
   const cardStyle: React.CSSProperties = {
-    maxWidth: "860px",
+    maxWidth: "960px",
     margin: "0 auto",
     backgroundColor: "#ffffff",
     padding: "24px",
@@ -229,47 +409,103 @@ export default function BarberStatsPage() {
       <div style={cardStyle}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap", marginBottom: "14px" }}>
           <h1 style={{ fontSize: "22px", fontWeight: 700, color: "#111", margin: 0 }}>Statistiques</h1>
-          <button
-            type="button"
-            disabled={refreshing}
-            onClick={async () => {
-              setRefreshing(true);
-              await loadStats();
-              setRefreshing(false);
-            }}
-            style={{ border: "1px solid #d1d5db", borderRadius: "10px", background: "#fff", padding: "8px 12px", fontSize: "13px", cursor: refreshing ? "not-allowed" : "pointer" }}
-          >
-            {refreshing ? "Actualisation..." : "Actualiser"}
-          </button>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            {RANGE_OPTIONS.map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setRangeDays(d)}
+                style={{
+                  border: d === rangeDays ? "2px solid #111" : "1px solid #d1d5db",
+                  borderRadius: "10px",
+                  background: d === rangeDays ? "#f3f4f6" : "#fff",
+                  padding: "7px 11px",
+                  fontSize: "13px",
+                  cursor: "pointer",
+                }}
+              >
+                {d}j
+              </button>
+            ))}
+            <button
+              type="button"
+              disabled={refreshing}
+              onClick={async () => {
+                setRefreshing(true);
+                await loadStats(rangeDays);
+                setRefreshing(false);
+              }}
+              style={{ border: "1px solid #d1d5db", borderRadius: "10px", background: "#fff", padding: "8px 12px", fontSize: "13px", cursor: refreshing ? "not-allowed" : "pointer" }}
+            >
+              {refreshing ? "Actualisation..." : "Actualiser"}
+            </button>
+            <button
+              type="button"
+              onClick={exportCsv}
+              style={{ border: "1px solid #d1d5db", borderRadius: "10px", background: "#fff", padding: "8px 12px", fontSize: "13px", cursor: "pointer" }}
+            >
+              Export CSV
+            </button>
+          </div>
         </div>
 
         <p style={{ fontSize: "13px", color: "#6b7280", marginTop: 0, marginBottom: "18px" }}>
-          Vue synthétique. Requêtes optimisées en comptage pour limiter la consommation.
+          Vue business sur {rangeDays} jours. Comparaison vs {rangeDays} jours précédents quand disponible.
         </p>
         {error && <p style={{ fontSize: "13px", color: "#dc2626", marginBottom: "14px" }}>{error}</p>}
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px", marginBottom: "18px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "10px", marginBottom: "18px" }}>
           {kpiCards.map((kpi) => (
             <div key={kpi.label} style={{ borderRadius: "12px", border: "1px solid #e5e7eb", padding: "12px", background: "#fff" }}>
               <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "6px" }}>{kpi.label}</div>
               <div style={{ fontSize: "26px", fontWeight: 700, color: kpi.accent }}>{kpi.value}</div>
+              <div style={{ marginTop: "4px", fontSize: "12px", color: "#6b7280" }}>
+                {kpi.delta == null ? "Pas assez d'historique" : `${kpi.delta >= 0 ? "+" : ""}${kpi.delta.toFixed(1)}%`}
+              </div>
             </div>
           ))}
         </div>
 
-        <div style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "14px" }}>
-          <h2 style={{ fontSize: "15px", margin: "0 0 12px", color: "#111" }}>Activité des 14 derniers jours</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px", marginBottom: "18px" }}>
+          <div style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "12px" }}>
+            <div style={{ fontSize: "12px", color: "#6b7280" }}>Taux de présence</div>
+            <div style={{ fontSize: "24px", fontWeight: 700, color: "#166534" }}>{stats.showRate.toFixed(1)}%</div>
+          </div>
+          <div style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "12px" }}>
+            <div style={{ fontSize: "12px", color: "#6b7280" }}>Taux d'annulation</div>
+            <div style={{ fontSize: "24px", fontWeight: 700, color: "#b91c1c" }}>{stats.cancelRate.toFixed(1)}%</div>
+          </div>
+          <div style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "12px" }}>
+            <div style={{ fontSize: "12px", color: "#6b7280" }}>Taux d'absence</div>
+            <div style={{ fontSize: "24px", fontWeight: 700, color: "#92400e" }}>{stats.noShowRate.toFixed(1)}%</div>
+          </div>
+          <div style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "12px" }}>
+            <div style={{ fontSize: "12px", color: "#6b7280" }}>Jour le plus chargé</div>
+            <div style={{ fontSize: "22px", fontWeight: 700, color: "#111", textTransform: "capitalize" }}>{stats.busiestWeekday}</div>
+          </div>
+          <div style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "12px" }}>
+            <div style={{ fontSize: "12px", color: "#6b7280" }}>Heure la plus demandée</div>
+            <div style={{ fontSize: "22px", fontWeight: 700, color: "#111" }}>{stats.busiestHour}</div>
+          </div>
+          <div style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "12px" }}>
+            <div style={{ fontSize: "12px", color: "#6b7280" }}>Créneaux totaux créés</div>
+            <div style={{ fontSize: "22px", fontWeight: 700, color: "#111" }}>{stats.totalSlots}</div>
+          </div>
+        </div>
+
+        <div style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "14px", marginBottom: "12px" }}>
+          <h2 style={{ fontSize: "15px", margin: "0 0 12px", color: "#111" }}>Activité journalière ({rangeDays} jours)</h2>
           <div style={{ overflowX: "auto" }}>
-            <div style={{ display: "grid", gridTemplateColumns: `repeat(${daily.length}, minmax(40px, 1fr))`, gap: "8px", minWidth: "640px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${daily.length}, minmax(32px, 1fr))`, gap: "8px", minWidth: "640px" }}>
               {daily.map((d) => (
                 <div key={d.label} style={{ textAlign: "center" }}>
                   <div style={{ display: "flex", justifyContent: "center", alignItems: "end", gap: "2px", height: "110px", marginBottom: "6px" }}>
-                    <div title={`Pris: ${d.booked}`} style={{ width: "7px", height: `${Math.max(4, (d.booked / maxForGraph) * 100)}px`, background: "#0f766e", borderRadius: "4px 4px 0 0" }} />
-                    <div title={`Annulés: ${d.cancelled}`} style={{ width: "7px", height: `${Math.max(4, (d.cancelled / maxForGraph) * 100)}px`, background: "#b91c1c", borderRadius: "4px 4px 0 0" }} />
-                    <div title={`Venus: ${d.arrived}`} style={{ width: "7px", height: `${Math.max(4, (d.arrived / maxForGraph) * 100)}px`, background: "#166534", borderRadius: "4px 4px 0 0" }} />
-                    <div title={`Absents: ${d.noShow}`} style={{ width: "7px", height: `${Math.max(4, (d.noShow / maxForGraph) * 100)}px`, background: "#92400e", borderRadius: "4px 4px 0 0" }} />
+                    <div title={`Pris: ${d.booked}`} style={{ width: "6px", height: `${Math.max(4, (d.booked / maxForGraph) * 100)}px`, background: "#0f766e", borderRadius: "4px 4px 0 0" }} />
+                    <div title={`Annulés: ${d.cancelled}`} style={{ width: "6px", height: `${Math.max(4, (d.cancelled / maxForGraph) * 100)}px`, background: "#b91c1c", borderRadius: "4px 4px 0 0" }} />
+                    <div title={`Venus: ${d.arrived}`} style={{ width: "6px", height: `${Math.max(4, (d.arrived / maxForGraph) * 100)}px`, background: "#166534", borderRadius: "4px 4px 0 0" }} />
+                    <div title={`Absents: ${d.noShow}`} style={{ width: "6px", height: `${Math.max(4, (d.noShow / maxForGraph) * 100)}px`, background: "#92400e", borderRadius: "4px 4px 0 0" }} />
                   </div>
-                  <div style={{ fontSize: "11px", color: "#6b7280" }}>{d.label}</div>
+                  <div style={{ fontSize: "10px", color: "#6b7280" }}>{d.label}</div>
                 </div>
               ))}
             </div>
@@ -280,6 +516,24 @@ export default function BarberStatsPage() {
             <span>■ Venus</span>
             <span>■ Absents</span>
           </div>
+        </div>
+
+        <div style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "14px" }}>
+          <h2 style={{ fontSize: "15px", margin: "0 0 12px", color: "#111" }}>Top prestations (par points)</h2>
+          {stats.prestationPointBuckets.length === 0 ? (
+            <p style={{ fontSize: "13px", color: "#6b7280", margin: 0 }}>
+              Pas encore assez de RDV traités pour afficher ce classement.
+            </p>
+          ) : (
+            <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "8px" }}>
+              {stats.prestationPointBuckets.map((b) => (
+                <li key={b.points} style={{ display: "flex", justifyContent: "space-between", border: "1px solid #eef0f2", borderRadius: "10px", padding: "8px 10px" }}>
+                  <span style={{ fontSize: "13px", color: "#111" }}>{b.points} points</span>
+                  <strong style={{ fontSize: "13px", color: "#111" }}>{b.count} RDV</strong>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
     </div>
