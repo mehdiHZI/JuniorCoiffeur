@@ -28,6 +28,7 @@ type StatsState = {
 
 const RANGE_OPTIONS: RangeOption[] = [7, 30, 90];
 const WEEKDAY_FR = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+const RDV_STATS_START_DATE = "2026-05-01T00:00:00.000Z";
 
 function toDateKey(date: Date): string {
   const y = date.getFullYear();
@@ -63,6 +64,10 @@ function periodBounds(days: number) {
     prevStartIso: `${toDateKey(prevStart)}T00:00:00.000Z`,
     prevEndIso: `${toDateKey(prevEnd)}T23:59:59.999Z`,
   };
+}
+
+function clampFromStart(iso: string): string {
+  return iso < RDV_STATS_START_DATE ? RDV_STATS_START_DATE : iso;
 }
 
 function percentDelta(current: number, previous: number): number | undefined {
@@ -137,6 +142,9 @@ export default function BarberStatsPage() {
 
     setError(null);
     const bounds = periodBounds(days);
+    const startIso = clampFromStart(bounds.startIso);
+    const prevStartIso = clampFromStart(bounds.prevStartIso);
+    const prevEndIso = clampFromStart(bounds.prevEndIso);
     const keys = buildWindowKeys(days);
     const dayAgg: Record<string, DayPoint> = {};
     keys.forEach((k) => {
@@ -186,7 +194,7 @@ export default function BarberStatsPage() {
         .from("bookings")
         .select("slot_id, created_at")
         .in("slot_id", slotIds)
-        .gte("created_at", bounds.startIso)
+        .gte("created_at", startIso)
         .lte("created_at", bounds.endIso);
       if (bookingErr) return void setError(bookingErr.message);
       bookedInRange = (bookingRows ?? []).length;
@@ -209,8 +217,8 @@ export default function BarberStatsPage() {
         .from("bookings")
         .select("*", { head: true, count: "exact" })
         .in("slot_id", slotIds)
-        .gte("created_at", bounds.prevStartIso)
-        .lte("created_at", bounds.prevEndIso);
+        .gte("created_at", prevStartIso)
+        .lte("created_at", prevEndIso);
       if (bookedPrevErr) return void setError(bookedPrevErr.message);
       bookedPrev = Number(bookedPrevCount ?? 0);
     }
@@ -219,7 +227,7 @@ export default function BarberStatsPage() {
       .from("booking_cancellations")
       .select("slot_id, cancelled_at")
       .eq("cancelled_by", user.id)
-      .gte("cancelled_at", bounds.startIso)
+      .gte("cancelled_at", startIso)
       .lte("cancelled_at", bounds.endIso);
     if (cancelErr) return void setError(cancelErr.message);
     const cancelledInRange = (cancelRows ?? []).length;
@@ -231,15 +239,15 @@ export default function BarberStatsPage() {
       .from("booking_cancellations")
       .select("*", { head: true, count: "exact" })
       .eq("cancelled_by", user.id)
-      .gte("cancelled_at", bounds.prevStartIso)
-      .lte("cancelled_at", bounds.prevEndIso);
+      .gte("cancelled_at", prevStartIso)
+      .lte("cancelled_at", prevEndIso);
     if (cancelledPrevErr) return void setError(cancelledPrevErr.message);
 
     const { data: outcomeRows, error: outcomeErr } = await supabase
       .from("booking_outcomes")
       .select("slot_id, status, prestation_points, created_at")
       .eq("barber_user_id", user.id)
-      .gte("created_at", bounds.startIso)
+      .gte("created_at", startIso)
       .lte("created_at", bounds.endIso);
     if (outcomeErr) return void setError(outcomeErr.message);
     let arrivedInRange = 0;
@@ -264,23 +272,23 @@ export default function BarberStatsPage() {
       .select("*", { head: true, count: "exact" })
       .eq("barber_user_id", user.id)
       .eq("status", "arrived")
-      .gte("created_at", bounds.prevStartIso)
-      .lte("created_at", bounds.prevEndIso);
+      .gte("created_at", prevStartIso)
+      .lte("created_at", prevEndIso);
     if (arrivedPrevErr) return void setError(arrivedPrevErr.message);
     const { count: noShowPrev, error: noShowPrevErr } = await supabase
       .from("booking_outcomes")
       .select("*", { head: true, count: "exact" })
       .eq("barber_user_id", user.id)
       .eq("status", "no_show")
-      .gte("created_at", bounds.prevStartIso)
-      .lte("created_at", bounds.prevEndIso);
+      .gte("created_at", prevStartIso)
+      .lte("created_at", prevEndIso);
     if (noShowPrevErr) return void setError(noShowPrevErr.message);
 
     const { data: txRows, error: txErr } = await supabase
       .from("transactions")
       .select("points")
       .eq("barber_user_id", user.id)
-      .gte("created_at", bounds.startIso)
+      .gte("created_at", startIso)
       .lte("created_at", bounds.endIso);
     if (txErr) return void setError(txErr.message);
     let pointsAdded = 0;
@@ -295,8 +303,8 @@ export default function BarberStatsPage() {
       .from("transactions")
       .select("points")
       .eq("barber_user_id", user.id)
-      .gte("created_at", bounds.prevStartIso)
-      .lte("created_at", bounds.prevEndIso);
+      .gte("created_at", prevStartIso)
+      .lte("created_at", prevEndIso);
     if (txPrevErr) return void setError(txPrevErr.message);
     let pointsAddedPrev = 0;
     let pointsRemovedPrev = 0;
@@ -450,7 +458,8 @@ export default function BarberStatsPage() {
         </div>
 
         <p style={{ fontSize: "13px", color: "#6b7280", marginTop: 0, marginBottom: "18px" }}>
-          Vue business sur {rangeDays} jours. Comparaison vs {rangeDays} jours précédents quand disponible.
+          Vue business sur {rangeDays} jours, avec statistiques RDV prises en compte a partir du 1 mai 2026.
+          Comparaison vs {rangeDays} jours précédents quand disponible.
         </p>
         {error && <p style={{ fontSize: "13px", color: "#dc2626", marginBottom: "14px" }}>{error}</p>}
 
