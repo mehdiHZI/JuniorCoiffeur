@@ -1,13 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import {
+  DailyFlowChart,
+  HourlyPeakChart,
+  OutcomesDonutChart,
+  PointsFlowChart,
+  PrestationPointsChart,
+  WeekdayBookingsChart,
+} from "./charts";
+import type { DailyChartRow, NamedCount, PointBucket } from "./charts";
 
 type RangeOption = 7 | 30 | 90;
-type DayPoint = { label: string; booked: number; cancelled: number; arrived: number; noShow: number };
 type Kpi = { label: string; value: number; accent: string; delta?: number };
-type PointBucket = { points: number; count: number };
 
 type StatsState = {
   totalCustomers: number;
@@ -28,6 +35,8 @@ type StatsState = {
 
 const RANGE_OPTIONS: RangeOption[] = [7, 30, 90];
 const WEEKDAY_FR = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+/** Ordre affichage graphique : lundi → dimanche */
+const WEEK_ORDER_MON_FIRST = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
 const RDV_STATS_START_DATE = "2026-05-01T00:00:00.000Z";
 
 function toDateKey(date: Date): string {
@@ -110,7 +119,9 @@ export default function BarberStatsPage() {
     busiestHour: "-",
     prestationPointBuckets: [],
   });
-  const [daily, setDaily] = useState<DayPoint[]>([]);
+  const [daily, setDaily] = useState<DailyChartRow[]>([]);
+  const [weeklyBars, setWeeklyBars] = useState<NamedCount[]>([]);
+  const [hourBars, setHourBars] = useState<NamedCount[]>([]);
   const [kpiDeltas, setKpiDeltas] = useState<Record<string, number | undefined>>({});
 
   const kpiCards = useMemo<Kpi[]>(
@@ -146,9 +157,9 @@ export default function BarberStatsPage() {
     const prevStartIso = clampFromStart(bounds.prevStartIso);
     const prevEndIso = clampFromStart(bounds.prevEndIso);
     const keys = buildWindowKeys(days);
-    const dayAgg: Record<string, DayPoint> = {};
+    const dayAgg: Record<string, DailyChartRow> = {};
     keys.forEach((k) => {
-      dayAgg[k] = { label: k.slice(5), booked: 0, cancelled: 0, arrived: 0, noShow: 0 };
+      dayAgg[k] = { label: k.slice(5), booked: 0, cancelled: 0, arrived: 0, noShow: 0, pointsAdded: 0, pointsRemoved: 0 };
     });
 
     // Charger les créneaux du coiffeur (id + horaire + date), pagination par sécurité.
@@ -286,7 +297,7 @@ export default function BarberStatsPage() {
 
     const { data: txRows, error: txErr } = await supabase
       .from("transactions")
-      .select("points")
+      .select("points, created_at")
       .eq("barber_user_id", user.id)
       .gte("created_at", startIso)
       .lte("created_at", bounds.endIso);
@@ -294,14 +305,20 @@ export default function BarberStatsPage() {
     let pointsAdded = 0;
     let pointsRemoved = 0;
     (txRows ?? []).forEach((row) => {
-      const p = Number((row as { points: number }).points ?? 0);
+      const r = row as { points: number; created_at: string };
+      const p = Number(r.points ?? 0);
       if (p > 0) pointsAdded += p;
       if (p < 0) pointsRemoved += Math.abs(p);
+      const dayKey = String(r.created_at ?? "").slice(0, 10);
+      if (dayAgg[dayKey]) {
+        if (p > 0) dayAgg[dayKey].pointsAdded += p;
+        if (p < 0) dayAgg[dayKey].pointsRemoved += Math.abs(p);
+      }
     });
 
     const { data: txPrevRows, error: txPrevErr } = await supabase
       .from("transactions")
-      .select("points")
+      .select("points, created_at")
       .eq("barber_user_id", user.id)
       .gte("created_at", prevStartIso)
       .lte("created_at", prevEndIso);
@@ -317,6 +334,20 @@ export default function BarberStatsPage() {
     const busiestWeekday = Object.entries(weekdayCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "-";
     const busiestHour = Object.entries(hourCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "-";
     const totalClosed = arrivedInRange + noShowInRange;
+
+    const weeklyForChart: NamedCount[] = WEEK_ORDER_MON_FIRST.map((day) => ({
+      name: day.charAt(0).toUpperCase() + day.slice(1),
+      value: weekdayCounts[day] ?? 0,
+    }));
+
+    const hourlyForChart: NamedCount[] = Object.entries(hourCounts)
+      .map(([name, value]) => ({
+        name,
+        value,
+        order: parseInt(name.replace("h", ""), 10) || 0,
+      }))
+      .sort((a, b) => a.order - b.order)
+      .map(({ name, value }) => ({ name, value }));
 
     setKpiDeltas({
       booked: percentDelta(bookedInRange, bookedPrev),
@@ -347,6 +378,8 @@ export default function BarberStatsPage() {
         .slice(0, 5),
     });
     setDaily(keys.map((k) => dayAgg[k]));
+    setWeeklyBars(weeklyForChart);
+    setHourBars(hourlyForChart);
   };
 
   useEffect(() => {
@@ -357,8 +390,6 @@ export default function BarberStatsPage() {
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router, rangeDays]);
-
-  const maxForGraph = Math.max(1, ...daily.map((d) => Math.max(d.booked, d.cancelled, d.arrived, d.noShow)));
 
   const exportCsv = () => {
     const lines: string[] = [];
@@ -375,9 +406,9 @@ export default function BarberStatsPage() {
     lines.push(`Cancel rate (%),${stats.cancelRate.toFixed(1)}`);
     lines.push(`No-show rate (%),${stats.noShowRate.toFixed(1)}`);
     lines.push("");
-    lines.push("Jour,RDV pris,RDV annules,Clients venus,Clients absents");
+    lines.push("Jour,RDV pris,RDV annules,Clients venus,Clients absents,Points ajoutes,Points retires");
     daily.forEach((d) => {
-      lines.push([csvEscape(d.label), d.booked, d.cancelled, d.arrived, d.noShow].join(","));
+      lines.push([csvEscape(d.label), d.booked, d.cancelled, d.arrived, d.noShow, d.pointsAdded, d.pointsRemoved].join(","));
     });
     const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -388,15 +419,15 @@ export default function BarberStatsPage() {
     URL.revokeObjectURL(url);
   };
 
-  const containerStyle: React.CSSProperties = {
+  const containerStyle: CSSProperties = {
     minHeight: "100vh",
     backgroundColor: "#f3f4f6",
     padding: "24px 16px",
     paddingTop: "60px",
     fontFamily: "'Helvetica Neue', Arial, sans-serif",
   };
-  const cardStyle: React.CSSProperties = {
-    maxWidth: "960px",
+  const cardStyle: CSSProperties = {
+    maxWidth: "1080px",
     margin: "0 auto",
     backgroundColor: "#ffffff",
     padding: "24px",
@@ -502,47 +533,19 @@ export default function BarberStatsPage() {
           </div>
         </div>
 
-        <div style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "14px", marginBottom: "12px" }}>
-          <h2 style={{ fontSize: "15px", margin: "0 0 12px", color: "#111" }}>Activité journalière ({rangeDays} jours)</h2>
-          <div style={{ overflowX: "auto" }}>
-            <div style={{ display: "grid", gridTemplateColumns: `repeat(${daily.length}, minmax(32px, 1fr))`, gap: "8px", minWidth: "640px" }}>
-              {daily.map((d) => (
-                <div key={d.label} style={{ textAlign: "center" }}>
-                  <div style={{ display: "flex", justifyContent: "center", alignItems: "end", gap: "2px", height: "110px", marginBottom: "6px" }}>
-                    <div title={`Pris: ${d.booked}`} style={{ width: "6px", height: `${Math.max(4, (d.booked / maxForGraph) * 100)}px`, background: "#0f766e", borderRadius: "4px 4px 0 0" }} />
-                    <div title={`Annulés: ${d.cancelled}`} style={{ width: "6px", height: `${Math.max(4, (d.cancelled / maxForGraph) * 100)}px`, background: "#b91c1c", borderRadius: "4px 4px 0 0" }} />
-                    <div title={`Venus: ${d.arrived}`} style={{ width: "6px", height: `${Math.max(4, (d.arrived / maxForGraph) * 100)}px`, background: "#166534", borderRadius: "4px 4px 0 0" }} />
-                    <div title={`Absents: ${d.noShow}`} style={{ width: "6px", height: `${Math.max(4, (d.noShow / maxForGraph) * 100)}px`, background: "#92400e", borderRadius: "4px 4px 0 0" }} />
-                  </div>
-                  <div style={{ fontSize: "10px", color: "#6b7280" }}>{d.label}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginTop: "12px", fontSize: "12px", color: "#4b5563" }}>
-            <span>■ Pris</span>
-            <span>■ Annulés</span>
-            <span>■ Venus</span>
-            <span>■ Absents</span>
-          </div>
+        <div style={{ display: "grid", gap: "16px", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))", marginBottom: "16px" }}>
+          <DailyFlowChart data={daily} />
+          <PointsFlowChart data={daily} />
         </div>
 
-        <div style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "14px" }}>
-          <h2 style={{ fontSize: "15px", margin: "0 0 12px", color: "#111" }}>Top prestations (par points)</h2>
-          {stats.prestationPointBuckets.length === 0 ? (
-            <p style={{ fontSize: "13px", color: "#6b7280", margin: 0 }}>
-              Pas encore assez de RDV traités pour afficher ce classement.
-            </p>
-          ) : (
-            <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "8px" }}>
-              {stats.prestationPointBuckets.map((b) => (
-                <li key={b.points} style={{ display: "flex", justifyContent: "space-between", border: "1px solid #eef0f2", borderRadius: "10px", padding: "8px 10px" }}>
-                  <span style={{ fontSize: "13px", color: "#111" }}>{b.points} points</span>
-                  <strong style={{ fontSize: "13px", color: "#111" }}>{b.count} RDV</strong>
-                </li>
-              ))}
-            </ul>
-          )}
+        <div style={{ display: "grid", gap: "16px", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 380px), 1fr))", marginBottom: "16px" }}>
+          <WeekdayBookingsChart data={weeklyBars} />
+          <HourlyPeakChart data={hourBars} />
+        </div>
+
+        <div style={{ display: "grid", gap: "16px", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 380px), 1fr))", marginBottom: "8px" }}>
+          <OutcomesDonutChart arrived={stats.arrivedInRange} noShow={stats.noShowInRange} />
+          <PrestationPointsChart buckets={stats.prestationPointBuckets} />
         </div>
       </div>
     </div>
