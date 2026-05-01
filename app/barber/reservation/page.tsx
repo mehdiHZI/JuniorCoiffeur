@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { compressImage } from "@/lib/imageCompression";
 import { parsePlaceImageUrls } from "@/lib/placeImageUrls";
+import { PlaceImagesPreview } from "@/app/components/PlaceImagesPreview";
 
 const SLOT_PLACE_IMAGES_BUCKET = "slot-place-images";
 const MAX_PLACE_IMAGES = 6;
@@ -819,19 +820,7 @@ export default function BarberReservationPage() {
                               {bookingClientInfo[s.id].phone && <> — {bookingClientInfo[s.id].phone}</>}
                             </span>
                           )}
-                          {s.place_image_urls.length > 0 && (
-                            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "6px" }}>
-                              {s.place_image_urls.map((url) => (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  key={url}
-                                  src={url}
-                                  alt=""
-                                  style={{ width: "40px", height: "40px", objectFit: "cover", borderRadius: "6px", border: "1px solid #e5e7eb" }}
-                                />
-                              ))}
-                            </div>
-                          )}
+                          <PlaceImagesPreview urls={s.place_image_urls} thumbSize={40} gap={6} marginTop="6px" />
                         </li>
                       ))}
                     </ul>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { parsePlaceImageUrls } from "@/lib/placeImageUrls";
+import { PlaceImagesPreview } from "@/app/components/PlaceImagesPreview";
 import { useRouter } from "next/navigation";
 
 type Barber = { id: string; first_name: string | null; last_name: string | null; surnom: string | null };
@@ -585,19 +586,7 @@ export default function ClientReservationPage() {
                             Réserver
                           </button>
                         </div>
-                        {s.place_image_urls.length > 0 && (
-                          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", overflowX: "auto", paddingBottom: "2px" }}>
-                            {s.place_image_urls.map((url) => (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                key={url}
-                                src={url}
-                                alt="Lieu du rendez-vous"
-                                style={{ width: "56px", height: "56px", objectFit: "cover", borderRadius: "8px", border: "1px solid #e5e7eb", flexShrink: 0 }}
-                              />
-                            ))}
-                          </div>
-                        )}
+                        <PlaceImagesPreview urls={s.place_image_urls} thumbSize={56} gap={6} alt="Lieu du rendez-vous" />
                       </li>
                     ))}
                   </ul>
@@ -698,17 +687,7 @@ export default function ClientReservationPage() {
             {confirmSlot.place_image_urls.length > 0 && (
               <div style={{ marginBottom: "20px" }}>
                 <p style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "8px" }}>Photos du lieu</p>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  {confirmSlot.place_image_urls.map((url) => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      key={url}
-                      src={url}
-                      alt="Lieu du rendez-vous"
-                      style={{ width: "72px", height: "72px", objectFit: "cover", borderRadius: "10px", border: "1px solid #e5e7eb" }}
-                    />
-                  ))}
-                </div>
+                <PlaceImagesPreview urls={confirmSlot.place_image_urls} thumbSize={72} gap={8} alt="Lieu du rendez-vous" />
               </div>
             )}
             <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>

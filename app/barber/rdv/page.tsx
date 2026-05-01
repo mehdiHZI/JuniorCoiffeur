@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { parsePlaceImageUrls } from "@/lib/placeImageUrls";
+import { PlaceImagesPreview } from "@/app/components/PlaceImagesPreview";
 
 type RdvRow = {
   id: number;
@@ -386,14 +387,7 @@ export default function BarberRdvPage() {
                     Adresse : {rdv.address.trim()}
                   </div>
                 )}
-                {rdv.place_image_urls.length > 0 && (
-                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "8px" }}>
-                    {rdv.place_image_urls.map((url) => (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img key={url} src={url} alt="" style={{ width: "44px", height: "44px", objectFit: "cover", borderRadius: "6px", border: "1px solid #e5e7eb" }} />
-                    ))}
-                  </div>
-                )}
+                <PlaceImagesPreview urls={rdv.place_image_urls} thumbSize={44} gap={6} marginTop="8px" />
                 <div style={{ display: "flex", gap: "8px", marginTop: "10px", flexWrap: "wrap" }}>
                   <button
                     type="button"

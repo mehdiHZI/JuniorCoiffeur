@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { compressImage } from "@/lib/imageCompression";
 import { isSupabaseStorageUrl, removeStorageFile } from "@/lib/storageCleanup";
 import { parsePlaceImageUrls } from "@/lib/placeImageUrls";
+import { PlaceImagesPreview } from "@/app/components/PlaceImagesPreview";
 import { useRouter } from "next/navigation";
 import { useClientRealtime } from "./ClientRealtimeContext";
 
@@ -812,14 +813,7 @@ export default function ClientHomePage() {
                       </button>
                     </div>
                   </div>
-                  {b.place_image_urls.length > 0 && (
-                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                      {b.place_image_urls.map((url) => (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img key={url} src={url} alt="Lieu du rendez-vous" style={{ width: "48px", height: "48px", objectFit: "cover", borderRadius: "8px", border: "1px solid #e5e7eb" }} />
-                      ))}
-                    </div>
-                  )}
+                  <PlaceImagesPreview urls={b.place_image_urls} thumbSize={48} gap={6} alt="Lieu du rendez-vous" />
                 </li>
               ))}
             </ul>
@@ -897,17 +891,7 @@ export default function ClientHomePage() {
               {bookingDetail.place_image_urls.length > 0 && (
                 <div style={{ marginBottom: "20px" }}>
                   <p style={{ fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "8px" }}>Photos du lieu</p>
-                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                    {bookingDetail.place_image_urls.map((url) => (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        key={url}
-                        src={url}
-                        alt="Lieu du rendez-vous"
-                        style={{ width: "72px", height: "72px", objectFit: "cover", borderRadius: "10px", border: "1px solid #e5e7eb" }}
-                      />
-                    ))}
-                  </div>
+                  <PlaceImagesPreview urls={bookingDetail.place_image_urls} thumbSize={72} gap={8} alt="Lieu du rendez-vous" />
                 </div>
               )}
               <button
