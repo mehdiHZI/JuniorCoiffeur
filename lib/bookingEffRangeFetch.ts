@@ -2,6 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 const PAGE = 500;
 
+/** Cast sécurisé pour les réponses `.select()` dynamiques (string de colonnes). */
+function rowsFromSelect<T>(data: unknown): T[] {
+  return (data ?? []) as unknown as T[];
+}
+
 function utcBounds(fromYmd: string, toYmd: string) {
   return {
     fromIso: `${fromYmd}T00:00:00.000Z`,
@@ -39,7 +44,7 @@ export async function fetchOutcomesByEffDateRange<T extends { id: number }>(
       .order("id", { ascending: true })
       .range(offset, offset + PAGE - 1);
     if (error) return { data: [], error: error.message };
-    const chunk = (data ?? []) as T[];
+    const chunk = rowsFromSelect<T>(data);
     chunk.forEach((row) => byId.set(row.id, row));
     if (chunk.length < PAGE) break;
     offset += PAGE;
@@ -57,7 +62,7 @@ export async function fetchOutcomesByEffDateRange<T extends { id: number }>(
       .order("id", { ascending: true })
       .range(offset, offset + PAGE - 1);
     if (error) return { data: [], error: error.message };
-    const chunk = (data ?? []) as T[];
+    const chunk = rowsFromSelect<T>(data);
     chunk.forEach((row) => byId.set(row.id, row));
     if (chunk.length < PAGE) break;
     offset += PAGE;
@@ -90,7 +95,7 @@ export async function fetchCancellationsByEffDateRange<T extends { id: number }>
       .order("id", { ascending: true })
       .range(offset, offset + PAGE - 1);
     if (error) return { data: [], error: error.message };
-    const chunk = (data ?? []) as T[];
+    const chunk = rowsFromSelect<T>(data);
     chunk.forEach((row) => byId.set(row.id, row));
     if (chunk.length < PAGE) break;
     offset += PAGE;
@@ -108,7 +113,7 @@ export async function fetchCancellationsByEffDateRange<T extends { id: number }>
       .order("id", { ascending: true })
       .range(offset, offset + PAGE - 1);
     if (error) return { data: [], error: error.message };
-    const chunk = (data ?? []) as T[];
+    const chunk = rowsFromSelect<T>(data);
     chunk.forEach((row) => byId.set(row.id, row));
     if (chunk.length < PAGE) break;
     offset += PAGE;
@@ -133,7 +138,7 @@ export async function fetchAllOutcomesForBarber<T extends { id: number }>(
       .order("id", { ascending: true })
       .range(offset, offset + PAGE - 1);
     if (error) return { data: [], error: error.message };
-    const chunk = (data ?? []) as T[];
+    const chunk = rowsFromSelect<T>(data);
     all.push(...chunk);
     if (chunk.length < PAGE) break;
     offset += PAGE;
@@ -156,7 +161,7 @@ export async function fetchAllCancellationsForBarber<T extends { id: number }>(
       .order("id", { ascending: true })
       .range(offset, offset + PAGE - 1);
     if (error) return { data: [], error: error.message };
-    const chunk = (data ?? []) as T[];
+    const chunk = rowsFromSelect<T>(data);
     all.push(...chunk);
     if (chunk.length < PAGE) break;
     offset += PAGE;
