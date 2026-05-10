@@ -325,7 +325,7 @@ export default function BarberHistoriqueRdvPage() {
             style={{
               border: loadedScope === "all" ? "2px solid #111" : "1px solid #d1d5db",
               borderRadius: "10px",
-              background: rangeFilter === null ? "#fff" : "#fff",
+              background: "#fff",
               padding: "6px 11px",
               fontSize: "13px",
               cursor: "pointer",
