@@ -3,6 +3,13 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { addDaysToYmd, clampHistoryFilter, toDateKey } from "@/lib/barberPeriod";
+import {
+  fetchAllCancellationsForBarber,
+  fetchAllOutcomesForBarber,
+  fetchCancellationsByEffDateRange,
+  fetchOutcomesByEffDateRange,
+} from "@/lib/bookingEffRangeFetch";
 
 type OutcomeRow = {
   id: number;
@@ -106,13 +113,32 @@ async function mapCustomersToNames(customerIds: string[]) {
   return { firstMap, lastMap };
 }
 
+function rollingRange(days: number): { fromYmd: string; toYmd: string } {
+  const toYmd = toDateKey(new Date());
+  const fromYmd = addDaysToYmd(toYmd, -(days - 1));
+  return { fromYmd, toYmd };
+}
+
+type LoadedScope = "all" | { fromYmd: string; toYmd: string };
+
+const SEL_OUTCOME_HIST =
+  "id, status, prestation_points, prestation_title, slot_date, start_time, end_time, created_at, customer_id";
+const SEL_CANCEL_HIST =
+  "id, customer_id, cancelled_at, cancel_reason, prestation_title, slot_date, start_time, end_time";
+
 export default function BarberHistoriqueRdvPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<HistRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  /** Ce qui est réellement chargé depuis Supabase (pas un simple filtre client). */
+  const [loadedScope, setLoadedScope] = useState<LoadedScope>({ ...rollingRange(30) });
+  const todayYmd = toDateKey(new Date());
+  const [draftFrom, setDraftFrom] = useState(() => addDaysToYmd(todayYmd, -29));
+  const [draftTo, setDraftTo] = useState(() => todayYmd);
+  const [filterError, setFilterError] = useState<string | null>(null);
 
-  const load = async () => {
+  const loadHistory = async (scope: LoadedScope) => {
     const { data: authData } = await supabase.auth.getUser();
     const user = authData.user;
     if (!user) {
@@ -125,47 +151,52 @@ export default function BarberHistoriqueRdvPage() {
       return;
     }
 
+    setLoading(true);
     setError(null);
 
-    const outcomesRaw: OutcomeRow[] = [];
-    let offset = 0;
-    const pageSize = 500;
-    while (true) {
-      const { data, error: qErr } = await supabase
-        .from("booking_outcomes")
-        .select("id, status, prestation_points, prestation_title, slot_date, start_time, end_time, created_at, customer_id")
-        .eq("barber_user_id", user.id)
-        .order("created_at", { ascending: false })
-        .range(offset, offset + pageSize - 1);
-      if (qErr) {
-        setError(qErr.message);
-        setLoading(false);
-        return;
-      }
-      const chunk = (data ?? []) as OutcomeRow[];
-      outcomesRaw.push(...chunk);
-      if (chunk.length < pageSize) break;
-      offset += pageSize;
-    }
+    let outcomesRaw: OutcomeRow[] = [];
+    let cancellationsRaw: CancellationRow[] = [];
 
-    const cancellationsRaw: CancellationRow[] = [];
-    offset = 0;
-    while (true) {
-      const { data, error: cErr } = await supabase
-        .from("booking_cancellations")
-        .select("id, customer_id, cancelled_at, cancel_reason, prestation_title, slot_date, start_time, end_time")
-        .eq("cancelled_by", user.id)
-        .order("cancelled_at", { ascending: false })
-        .range(offset, offset + pageSize - 1);
-      if (cErr) {
-        setError(cErr.message);
+    if (scope === "all") {
+      const o = await fetchAllOutcomesForBarber<OutcomeRow>(supabase, user.id, SEL_OUTCOME_HIST);
+      if (o.error) {
+        setError(o.error);
         setLoading(false);
         return;
       }
-      const chunk = (data ?? []) as CancellationRow[];
-      cancellationsRaw.push(...chunk);
-      if (chunk.length < pageSize) break;
-      offset += pageSize;
+      const c = await fetchAllCancellationsForBarber<CancellationRow>(supabase, user.id, SEL_CANCEL_HIST);
+      if (c.error) {
+        setError(c.error);
+        setLoading(false);
+        return;
+      }
+      outcomesRaw = o.data;
+      cancellationsRaw = c.data;
+    } else {
+      const o = await fetchOutcomesByEffDateRange<OutcomeRow>(supabase, {
+        barberUserId: user.id,
+        fromYmd: scope.fromYmd,
+        toYmd: scope.toYmd,
+        select: SEL_OUTCOME_HIST,
+      });
+      if (o.error) {
+        setError(o.error);
+        setLoading(false);
+        return;
+      }
+      const c = await fetchCancellationsByEffDateRange<CancellationRow>(supabase, {
+        cancelledBy: user.id,
+        fromYmd: scope.fromYmd,
+        toYmd: scope.toYmd,
+        select: SEL_CANCEL_HIST,
+      });
+      if (c.error) {
+        setError(c.error);
+        setLoading(false);
+        return;
+      }
+      outcomesRaw = o.data;
+      cancellationsRaw = c.data;
     }
 
     const allCust = [...new Set([...outcomesRaw.map((r) => r.customer_id), ...cancellationsRaw.map((r) => r.customer_id)])];
@@ -197,11 +228,13 @@ export default function BarberHistoriqueRdvPage() {
     });
 
     setRows(merged);
+    setLoadedScope(scope);
     setLoading(false);
   };
 
   useEffect(() => {
-    void load();
+    void loadHistory({ ...rollingRange(30) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   const grouped = useMemo(() => {
@@ -214,6 +247,22 @@ export default function BarberHistoriqueRdvPage() {
     return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]));
   }, [rows]);
 
+  const applyCustomRange = () => {
+    const c = clampHistoryFilter(draftFrom, draftTo);
+    if ("error" in c) {
+      setFilterError(c.error);
+      return;
+    }
+    setFilterError(null);
+    void loadHistory({ fromYmd: c.from, toYmd: c.to });
+  };
+
+  const scopeMatchesRolling = (days: number) => {
+    if (loadedScope === "all") return false;
+    const r = rollingRange(days);
+    return loadedScope.fromYmd === r.fromYmd && loadedScope.toYmd === r.toYmd;
+  };
+
   const containerStyle: CSSProperties = {
     minHeight: "100vh",
     backgroundColor: "#f3f4f6",
@@ -223,7 +272,7 @@ export default function BarberHistoriqueRdvPage() {
   };
 
   const cardStyle: CSSProperties = {
-    maxWidth: "720px",
+    maxWidth: "920px",
     margin: "0 auto",
     backgroundColor: "#ffffff",
     padding: "28px 24px",
@@ -247,10 +296,99 @@ export default function BarberHistoriqueRdvPage() {
     <div style={containerStyle}>
       <div style={cardStyle}>
         <h1 style={{ fontSize: "22px", fontWeight: 700, marginBottom: "8px", color: "#111" }}>Historique des RDV</h1>
-        <p style={{ fontSize: "14px", color: "#6b7280", marginBottom: "16px", lineHeight: 1.5 }}>
+        <p style={{ fontSize: "14px", color: "#6b7280", marginBottom: "12px", lineHeight: 1.5 }}>
           Confirmations <strong>client venu / absent</strong>, et réservations <strong>annulées par toi</strong> (salon).
-          Classement par <strong>date du créneau</strong>.
+          Classement par <strong>date du créneau</strong>. Par défaut seuls les <strong>30 derniers jours</strong> sont chargés
+          depuis la base ; utilise <strong>Tout</strong> uniquement si tu as besoin de tout l&apos;historique.
         </p>
+
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "8px",
+            alignItems: "center",
+            marginBottom: "14px",
+            padding: "12px",
+            borderRadius: "12px",
+            border: "1px solid #e5e7eb",
+            background: "#fafafa",
+          }}
+        >
+          <span style={{ fontSize: "13px", fontWeight: 600, color: "#374151" }}>Période :</span>
+          <button
+            type="button"
+            onClick={() => {
+              setFilterError(null);
+              void loadHistory("all");
+            }}
+            style={{
+              border: loadedScope === "all" ? "2px solid #111" : "1px solid #d1d5db",
+              borderRadius: "10px",
+              background: rangeFilter === null ? "#fff" : "#fff",
+              padding: "6px 11px",
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
+          >
+            Tout
+          </button>
+          {[7, 30, 90].map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => {
+                setFilterError(null);
+                void loadHistory(rollingRange(d));
+              }}
+              style={{
+                border: scopeMatchesRolling(d) ? "2px solid #111" : "1px solid #d1d5db",
+                borderRadius: "10px",
+                background: "#fff",
+                padding: "6px 11px",
+                fontSize: "13px",
+                cursor: "pointer",
+              }}
+            >
+              {d} jours
+            </button>
+          ))}
+          <span style={{ fontSize: "13px", color: "#6b7280" }}>ou du</span>
+          <input
+            type="date"
+            value={draftFrom}
+            max={draftTo}
+            onChange={(e) => setDraftFrom(e.target.value)}
+            style={{ border: "1px solid #d1d5db", borderRadius: "10px", padding: "6px 10px", fontSize: "13px" }}
+          />
+          <span style={{ fontSize: "13px", color: "#6b7280" }}>au</span>
+          <input
+            type="date"
+            value={draftTo}
+            min={draftFrom}
+            max={todayYmd}
+            onChange={(e) => setDraftTo(e.target.value)}
+            style={{ border: "1px solid #d1d5db", borderRadius: "10px", padding: "6px 10px", fontSize: "13px" }}
+          />
+          <button
+            type="button"
+            onClick={applyCustomRange}
+            style={{ border: "1px solid #d1d5db", borderRadius: "10px", background: "#fff", padding: "6px 12px", fontSize: "13px", cursor: "pointer" }}
+          >
+            Appliquer
+          </button>
+          {loadedScope === "all" ? (
+            <span style={{ fontSize: "12px", color: "#6b7280", marginLeft: "4px" }}>
+              (toute la base — charge plus de données)
+            </span>
+          ) : (
+            <span style={{ fontSize: "12px", color: "#6b7280", marginLeft: "4px" }}>
+              (chargé : {loadedScope.fromYmd} → {loadedScope.toYmd})
+            </span>
+          )}
+        </div>
+        {filterError && <p style={{ fontSize: "13px", color: "#dc2626", marginBottom: "10px" }}>{filterError}</p>}
+
         {error && (
           <p style={{ fontSize: "13px", color: "#dc2626", marginBottom: "12px" }}>
             {error}
@@ -265,10 +403,14 @@ export default function BarberHistoriqueRdvPage() {
           </p>
         )}
 
-        {rows.length === 0 && !error ? (
+        {rows.length === 0 && !error && loadedScope === "all" ? (
           <p style={{ fontSize: "14px", color: "#6b7280" }}>
             Aucune entrée pour l&apos;instant : confirme un passage depuis « Rendez-vous à venir », ou annule une réservation
             depuis ton planning.
+          </p>
+        ) : rows.length === 0 && !error && loadedScope !== "all" ? (
+          <p style={{ fontSize: "14px", color: "#6b7280" }}>
+            Aucun rendez-vous dans la période chargée. Élargis les dates ou clique sur « Tout » pour parcourir tout l&apos;historique.
           </p>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>

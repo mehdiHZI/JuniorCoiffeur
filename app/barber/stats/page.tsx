@@ -12,8 +12,23 @@ import {
   WeekdayBookingsChart,
 } from "./charts";
 import type { DailyChartRow, NamedCount, PointBucket } from "./charts";
+import {
+  addDaysToYmd,
+  buildInclusiveRangeKeys,
+  clampFromStartIso,
+  clampStatRange,
+  periodBoundsPreset,
+  RDV_STATS_MIN_YMD,
+  toDateKey,
+} from "@/lib/barberPeriod";
+import { fetchCancellationsByEffDateRange, fetchOutcomesByEffDateRange } from "@/lib/bookingEffRangeFetch";
 
 type RangeOption = 7 | 30 | 90;
+
+/** Période affichée : presets glissants ou plage calendaire fixe */
+type StatPeriod =
+  | { type: "preset"; days: RangeOption }
+  | { type: "custom"; fromYmd: string; toYmd: string };
 type Kpi = {
   label: string;
   value: number;
@@ -63,47 +78,6 @@ const RANGE_OPTIONS: RangeOption[] = [7, 30, 90];
 const WEEKDAY_FR = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
 /** Ordre affichage graphique : lundi → dimanche */
 const WEEK_ORDER_MON_FIRST = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
-const RDV_STATS_START_DATE = "2026-05-01T00:00:00.000Z";
-
-function toDateKey(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function buildWindowKeys(days: number): string[] {
-  const keys: string[] = [];
-  const now = new Date();
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(now.getDate() - i);
-    keys.push(toDateKey(d));
-  }
-  return keys;
-}
-
-function periodBounds(days: number) {
-  const end = new Date();
-  const start = new Date();
-  start.setDate(end.getDate() - (days - 1));
-
-  const prevEnd = new Date(start);
-  prevEnd.setDate(start.getDate() - 1);
-  const prevStart = new Date(prevEnd);
-  prevStart.setDate(prevEnd.getDate() - (days - 1));
-
-  return {
-    startIso: `${toDateKey(start)}T00:00:00.000Z`,
-    endIso: `${toDateKey(end)}T23:59:59.999Z`,
-    prevStartIso: `${toDateKey(prevStart)}T00:00:00.000Z`,
-    prevEndIso: `${toDateKey(prevEnd)}T23:59:59.999Z`,
-  };
-}
-
-function clampFromStart(iso: string): string {
-  return iso < RDV_STATS_START_DATE ? RDV_STATS_START_DATE : iso;
-}
 
 function percentDelta(current: number, previous: number): number | undefined {
   if (previous <= 0) return undefined;
@@ -150,7 +124,10 @@ export default function BarberStatsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [rangeDays, setRangeDays] = useState<RangeOption>(30);
+  const [statPeriod, setStatPeriod] = useState<StatPeriod>({ type: "preset", days: 30 });
+  const todayYmd = toDateKey(new Date());
+  const [customDraftFrom, setCustomDraftFrom] = useState(() => addDaysToYmd(todayYmd, -29));
+  const [customDraftTo, setCustomDraftTo] = useState(() => todayYmd);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<StatsState>({
     totalClientsSalon: 0,
@@ -190,7 +167,17 @@ export default function BarberStatsPage() {
     [stats, kpiDeltas]
   );
 
-  const loadStats = async (days: RangeOption) => {
+  const applyCustomPeriod = () => {
+    const clamped = clampStatRange(customDraftFrom, customDraftTo);
+    if ("error" in clamped) {
+      setError(clamped.error);
+      return;
+    }
+    setError(null);
+    setStatPeriod({ type: "custom", fromYmd: clamped.from, toYmd: clamped.to });
+  };
+
+  const loadStats = async (period: StatPeriod) => {
     const { data: authData } = await supabase.auth.getUser();
     const user = authData.user;
     if (!user) {
@@ -215,56 +202,64 @@ export default function BarberStatsPage() {
       return;
     }
 
-    const bounds = periodBounds(days);
-    const windowStartYmd = clampFromStart(bounds.startIso).slice(0, 10);
-    const windowEndYmd = toDateKey(new Date());
-    const prevStartYmd = clampFromStart(bounds.prevStartIso).slice(0, 10);
-    const prevEndYmd = clampFromStart(bounds.prevEndIso).slice(0, 10);
+    let windowStartYmd: string;
+    let windowEndYmd: string;
+    let prevStartYmd: string;
+    let prevEndYmd: string;
+    let keys: string[];
 
-    const keys = buildWindowKeys(days);
+    if (period.type === "preset") {
+      const bounds = periodBoundsPreset(period.days);
+      windowEndYmd = toDateKey(new Date());
+      windowStartYmd = clampFromStartIso(bounds.startIso).slice(0, 10);
+      prevStartYmd = clampFromStartIso(bounds.prevStartIso).slice(0, 10);
+      prevEndYmd = clampFromStartIso(bounds.prevEndIso).slice(0, 10);
+      keys = buildInclusiveRangeKeys(windowStartYmd, windowEndYmd);
+    } else {
+      const clamped = clampStatRange(period.fromYmd, period.toYmd);
+      if ("error" in clamped) {
+        setError(clamped.error);
+        return;
+      }
+      windowStartYmd = clamped.from;
+      windowEndYmd = clamped.to;
+      keys = buildInclusiveRangeKeys(windowStartYmd, windowEndYmd);
+      const n = keys.length;
+      prevEndYmd = addDaysToYmd(windowStartYmd, -1);
+      prevStartYmd = addDaysToYmd(windowStartYmd, -n);
+    }
     const keySet = new Set(keys);
     const dayAgg: Record<string, DailyChartRow> = {};
     keys.forEach((k) => {
       dayAgg[k] = { label: k.slice(5), booked: 0, cancelled: 0, arrived: 0, noShow: 0, pointsAdded: 0, pointsRemoved: 0 };
     });
 
-    const allOutcomes: OutcomeRowDb[] = [];
-    let off = 0;
-    const pageSize = 500;
-    for (;;) {
-      const { data, error: oErr } = await supabase
-        .from("booking_outcomes")
-        .select("id, customer_id, status, prestation_points, slot_date, start_time, created_at")
-        .eq("barber_user_id", user.id)
-        .order("id", { ascending: true })
-        .range(off, off + pageSize - 1);
-      if (oErr) {
-        setError(oErr.message);
-        return;
-      }
-      const chunk = (data ?? []) as OutcomeRowDb[];
-      allOutcomes.push(...chunk);
-      if (chunk.length < pageSize) break;
-      off += pageSize;
+    const fetchFromYmd = prevStartYmd;
+    const fetchToYmd = windowEndYmd;
+
+    const selOutcome = "id, customer_id, status, prestation_points, slot_date, start_time, created_at";
+    const selCancel = "id, customer_id, slot_date, start_time, cancelled_at";
+
+    const { data: allOutcomes, error: oFetchErr } = await fetchOutcomesByEffDateRange<OutcomeRowDb>(supabase, {
+      barberUserId: user.id,
+      fromYmd: fetchFromYmd,
+      toYmd: fetchToYmd,
+      select: selOutcome,
+    });
+    if (oFetchErr) {
+      setError(oFetchErr);
+      return;
     }
 
-    const allCancels: CancelRowDb[] = [];
-    off = 0;
-    for (;;) {
-      const { data, error: cErr } = await supabase
-        .from("booking_cancellations")
-        .select("id, customer_id, slot_date, start_time, cancelled_at")
-        .eq("cancelled_by", user.id)
-        .order("id", { ascending: true })
-        .range(off, off + pageSize - 1);
-      if (cErr) {
-        setError(cErr.message);
-        return;
-      }
-      const chunk = (data ?? []) as CancelRowDb[];
-      allCancels.push(...chunk);
-      if (chunk.length < pageSize) break;
-      off += pageSize;
+    const { data: allCancels, error: cFetchErr } = await fetchCancellationsByEffDateRange<CancelRowDb>(supabase, {
+      cancelledBy: user.id,
+      fromYmd: fetchFromYmd,
+      toYmd: fetchToYmd,
+      select: selCancel,
+    });
+    if (cFetchErr) {
+      setError(cFetchErr);
+      return;
     }
 
     const inCurrent = (ymd: string) => inYmdRange(ymd, windowStartYmd, windowEndYmd);
@@ -408,24 +403,33 @@ export default function BarberStatsPage() {
 
   useEffect(() => {
     const run = async () => {
-      await loadStats(rangeDays);
+      await loadStats(statPeriod);
       setLoading(false);
     };
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router, rangeDays]);
+  }, [router, statPeriod]);
+
+  const periodLabelShort =
+    statPeriod.type === "preset"
+      ? `${statPeriod.days}j`
+      : `${statPeriod.fromYmd}_${statPeriod.toYmd}`;
+  const periodLabelLong =
+    statPeriod.type === "preset"
+      ? `${statPeriod.days} derniers jours`
+      : `du ${statPeriod.fromYmd} au ${statPeriod.toYmd}`;
 
   const exportCsv = () => {
     const lines: string[] = [];
-    lines.push("Periode (jours),Valeur");
-    lines.push(`${rangeDays},${rangeDays}`);
+    lines.push("Periode,Valeur");
+    lines.push(`${periodLabelLong},`);
     lines.push(`Clients du salon (comptes),${stats.totalClientsSalon}`);
-    lines.push(`RDV historique (${rangeDays}j),${stats.totalHistorique}`);
-    lines.push(`Annulations salon (${rangeDays}j),${stats.cancelledInRange}`);
-    lines.push(`Clients venus (${rangeDays}j),${stats.arrivedInRange}`);
-    lines.push(`Clients absents (${rangeDays}j),${stats.noShowInRange}`);
-    lines.push(`Points ajoutes (${rangeDays}j),${stats.pointsAdded}`);
-    lines.push(`Points retires (${rangeDays}j),${stats.pointsRemoved}`);
+    lines.push(`RDV historique (${periodLabelLong}),${stats.totalHistorique}`);
+    lines.push(`Annulations salon (${periodLabelLong}),${stats.cancelledInRange}`);
+    lines.push(`Clients venus (${periodLabelLong}),${stats.arrivedInRange}`);
+    lines.push(`Clients absents (${periodLabelLong}),${stats.noShowInRange}`);
+    lines.push(`Points ajoutes (${periodLabelLong}),${stats.pointsAdded}`);
+    lines.push(`Points retires (${periodLabelLong}),${stats.pointsRemoved}`);
     lines.push(`Show rate (%),${stats.showRate.toFixed(1)}`);
     lines.push(`Cancel rate (%),${stats.cancelRate.toFixed(1)}`);
     lines.push(`No-show rate (%),${stats.noShowRate.toFixed(1)}`);
@@ -438,7 +442,7 @@ export default function BarberStatsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `stats-barber-${rangeDays}j.csv`;
+    a.download = `stats-barber-${periodLabelShort}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -477,11 +481,15 @@ export default function BarberStatsPage() {
               <button
                 key={d}
                 type="button"
-                onClick={() => setRangeDays(d)}
+                onClick={() => {
+                  setError(null);
+                  setStatPeriod({ type: "preset", days: d });
+                }}
                 style={{
-                  border: d === rangeDays ? "2px solid #111" : "1px solid #d1d5db",
+                  border:
+                    statPeriod.type === "preset" && statPeriod.days === d ? "2px solid #111" : "1px solid #d1d5db",
                   borderRadius: "10px",
-                  background: d === rangeDays ? "#f3f4f6" : "#fff",
+                  background: statPeriod.type === "preset" && statPeriod.days === d ? "#f3f4f6" : "#fff",
                   padding: "7px 11px",
                   fontSize: "13px",
                   cursor: "pointer",
@@ -490,12 +498,45 @@ export default function BarberStatsPage() {
                 {d}j
               </button>
             ))}
+            <span style={{ fontSize: "13px", color: "#6b7280", alignSelf: "center" }}>ou du</span>
+            <input
+              type="date"
+              value={customDraftFrom}
+              min={RDV_STATS_MIN_YMD}
+              max={customDraftTo}
+              onChange={(e) => setCustomDraftFrom(e.target.value)}
+              style={{ border: "1px solid #d1d5db", borderRadius: "10px", padding: "6px 10px", fontSize: "13px" }}
+            />
+            <span style={{ fontSize: "13px", color: "#6b7280", alignSelf: "center" }}>au</span>
+            <input
+              type="date"
+              value={customDraftTo}
+              min={customDraftFrom}
+              max={todayYmd}
+              onChange={(e) => setCustomDraftTo(e.target.value)}
+              style={{ border: "1px solid #d1d5db", borderRadius: "10px", padding: "6px 10px", fontSize: "13px" }}
+            />
+            <button
+              type="button"
+              onClick={applyCustomPeriod}
+              style={{
+                border:
+                  statPeriod.type === "custom" ? "2px solid #111" : "1px solid #d1d5db",
+                borderRadius: "10px",
+                background: statPeriod.type === "custom" ? "#f3f4f6" : "#fff",
+                padding: "7px 11px",
+                fontSize: "13px",
+                cursor: "pointer",
+              }}
+            >
+              Appliquer
+            </button>
             <button
               type="button"
               disabled={refreshing}
               onClick={async () => {
                 setRefreshing(true);
-                await loadStats(rangeDays);
+                await loadStats(statPeriod);
                 setRefreshing(false);
               }}
               style={{ border: "1px solid #d1d5db", borderRadius: "10px", background: "#fff", padding: "8px 12px", fontSize: "13px", cursor: refreshing ? "not-allowed" : "pointer" }}
@@ -513,10 +554,14 @@ export default function BarberStatsPage() {
         </div>
 
         <p style={{ fontSize: "13px", color: "#6b7280", marginTop: 0, marginBottom: "18px" }}>
-          La carte <strong>Clients du salon</strong> compte tous les comptes clients en base. Le reste provient de l&apos;historique
-          (confirmations et annulations salon), filtré par <strong>date du créneau</strong> (ou date d&apos;enregistrement si le créneau
-          n&apos;est pas stocké). Période affichée : {rangeDays} jours à partir du 1 mai 2026 ; comparaison vs {rangeDays} jours précédents
-          pour les indicateurs basés sur l&apos;historique.
+          La carte <strong>Clients du salon</strong> compte tous les comptes clients en base. Le reste est lu dans Supabase pour la{" "}
+          <strong>période affichée et la période de comparaison uniquement</strong> (moins de données transférées). Filtrage par{" "}
+          <strong>date du créneau</strong> (ou date d&apos;enregistrement si le créneau n&apos;est pas stocké).{" "}
+          <strong>Période sélectionnée :</strong> {periodLabelLong}
+          {statPeriod.type === "preset"
+            ? ` (fenêtre glissante · stats depuis le ${RDV_STATS_MIN_YMD} · comparaison avec les ${statPeriod.days} jours précédents)`
+            : ` (plage fixe · comparaison avec les ${buildInclusiveRangeKeys(statPeriod.fromYmd, statPeriod.toYmd).length} jours calendaires précédents)`}
+          .
         </p>
         {error && <p style={{ fontSize: "13px", color: "#dc2626", marginBottom: "14px" }}>{error}</p>}
 
