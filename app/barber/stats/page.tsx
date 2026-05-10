@@ -306,18 +306,30 @@ export default function BarberStatsPage() {
       else noShowInRange += 1;
 
       const p = Number(o.prestation_points ?? 0);
-      if (p > 0) {
-        pointsAdded += p;
-        pointBuckets[p] = (pointBuckets[p] ?? 0) + 1;
+      // Aligné sur l’enregistrement RDV : la magnitude est toujours positive dans booking_outcomes ;
+      // les points sont crédités seulement si « venu », sinon c’est une pénalité (retrait), comme la transaction négative.
+      if (o.status === "arrived") {
+        if (p > 0) {
+          pointsAdded += p;
+          pointBuckets[p] = (pointBuckets[p] ?? 0) + 1;
+        }
+        if (p < 0) pointsRemoved += Math.abs(p);
+      } else {
+        if (p > 0) pointsRemoved += p;
+        else if (p < 0) pointsRemoved += Math.abs(p);
       }
-      if (p < 0) pointsRemoved += Math.abs(p);
 
       if (keySet.has(eff)) {
         dayAgg[eff].booked += 1;
         if (o.status === "arrived") dayAgg[eff].arrived += 1;
         else dayAgg[eff].noShow += 1;
-        if (p > 0) dayAgg[eff].pointsAdded += p;
-        if (p < 0) dayAgg[eff].pointsRemoved += Math.abs(p);
+        if (o.status === "arrived") {
+          if (p > 0) dayAgg[eff].pointsAdded += p;
+          if (p < 0) dayAgg[eff].pointsRemoved += Math.abs(p);
+        } else {
+          if (p > 0) dayAgg[eff].pointsRemoved += p;
+          else if (p < 0) dayAgg[eff].pointsRemoved += Math.abs(p);
+        }
       }
       bumpWeekdayHour(eff, o.start_time);
     });
@@ -335,8 +347,13 @@ export default function BarberStatsPage() {
       if (o.status === "arrived") arrivedPrevCount += 1;
       else noShowPrevCount += 1;
       const p = Number(o.prestation_points ?? 0);
-      if (p > 0) pointsAddedPrev += p;
-      if (p < 0) pointsRemovedPrev += Math.abs(p);
+      if (o.status === "arrived") {
+        if (p > 0) pointsAddedPrev += p;
+        if (p < 0) pointsRemovedPrev += Math.abs(p);
+      } else {
+        if (p > 0) pointsRemovedPrev += p;
+        else if (p < 0) pointsRemovedPrev += Math.abs(p);
+      }
     });
 
     const busiestWeekday = Object.entries(weekdayCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "-";
