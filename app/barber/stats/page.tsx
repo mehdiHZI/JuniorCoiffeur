@@ -14,7 +14,15 @@ import {
 import type { DailyChartRow, NamedCount, PointBucket } from "./charts";
 
 type RangeOption = 7 | 30 | 90;
-type Kpi = { label: string; value: number; accent: string; delta?: number };
+type Kpi = {
+  label: string;
+  value: number;
+  accent: string;
+  /** Variation vs période précédente ; ignoré si `footnote` est défini */
+  delta?: number;
+  /** Texte sous la valeur (ex. métrique cumulative hors période) */
+  footnote?: string;
+};
 
 type OutcomeRowDb = {
   id: number;
@@ -35,7 +43,8 @@ type CancelRowDb = {
 };
 
 type StatsState = {
-  distinctClients: number;
+  /** Total des lignes `customers` avec compte (user_id) — base salon */
+  totalClientsSalon: number;
   totalHistorique: number;
   cancelledInRange: number;
   arrivedInRange: number;
@@ -144,7 +153,7 @@ export default function BarberStatsPage() {
   const [rangeDays, setRangeDays] = useState<RangeOption>(30);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<StatsState>({
-    distinctClients: 0,
+    totalClientsSalon: 0,
     totalHistorique: 0,
     cancelledInRange: 0,
     arrivedInRange: 0,
@@ -165,7 +174,12 @@ export default function BarberStatsPage() {
 
   const kpiCards = useMemo<Kpi[]>(
     () => [
-      { label: "Clients distincts (historique)", value: stats.distinctClients, accent: "#111827", delta: kpiDeltas.distinct },
+      {
+        label: "Clients du salon",
+        value: stats.totalClientsSalon,
+        accent: "#111827",
+        footnote: "Total des comptes clients enregistrés",
+      },
       { label: "RDV (historique)", value: stats.totalHistorique, accent: "#0f766e", delta: kpiDeltas.historique },
       { label: "Annulations salon", value: stats.cancelledInRange, accent: "#b91c1c", delta: kpiDeltas.cancelled },
       { label: "Clients venus", value: stats.arrivedInRange, accent: "#166534", delta: kpiDeltas.arrived },
@@ -191,6 +205,16 @@ export default function BarberStatsPage() {
     }
 
     setError(null);
+
+    const { count: clientsCount, error: custErr } = await supabase
+      .from("customers")
+      .select("*", { head: true, count: "exact" })
+      .not("user_id", "is", null);
+    if (custErr) {
+      setError(custErr.message);
+      return;
+    }
+
     const bounds = periodBounds(days);
     const windowStartYmd = clampFromStart(bounds.startIso).slice(0, 10);
     const windowEndYmd = toDateKey(new Date());
@@ -250,9 +274,6 @@ export default function BarberStatsPage() {
     const cancelCurr = allCancels.filter((c) => inCurrent(effCancelDate(c)));
     const outPrev = allOutcomes.filter((o) => inPrev(effOutcomeDate(o)));
     const cancelPrev = allCancels.filter((c) => inPrev(effCancelDate(c)));
-
-    const distinctClients = new Set([...outCurr.map((o) => o.customer_id), ...cancelCurr.map((c) => c.customer_id)]).size;
-    const distinctPrevCount = new Set([...outPrev.map((o) => o.customer_id), ...cancelPrev.map((c) => c.customer_id)]).size;
 
     const totalHistorique = outCurr.length + cancelCurr.length;
     const totalHistoriquePrev = outPrev.length + cancelPrev.length;
@@ -337,7 +358,6 @@ export default function BarberStatsPage() {
       .map(({ name, value }) => ({ name, value }));
 
     setKpiDeltas({
-      distinct: percentDelta(distinctClients, distinctPrevCount),
       historique: percentDelta(totalHistorique, totalHistoriquePrev),
       cancelled: percentDelta(cancelledInRange, cancelledPrevCount),
       arrived: percentDelta(arrivedInRange, arrivedPrevCount),
@@ -347,7 +367,7 @@ export default function BarberStatsPage() {
     });
 
     setStats({
-      distinctClients,
+      totalClientsSalon: Number(clientsCount ?? 0),
       totalHistorique,
       cancelledInRange,
       arrivedInRange,
@@ -382,7 +402,7 @@ export default function BarberStatsPage() {
     const lines: string[] = [];
     lines.push("Periode (jours),Valeur");
     lines.push(`${rangeDays},${rangeDays}`);
-    lines.push(`Clients distincts historique,${stats.distinctClients}`);
+    lines.push(`Clients du salon (comptes),${stats.totalClientsSalon}`);
     lines.push(`RDV historique (${rangeDays}j),${stats.totalHistorique}`);
     lines.push(`Annulations salon (${rangeDays}j),${stats.cancelledInRange}`);
     lines.push(`Clients venus (${rangeDays}j),${stats.arrivedInRange}`);
@@ -476,9 +496,10 @@ export default function BarberStatsPage() {
         </div>
 
         <p style={{ fontSize: "13px", color: "#6b7280", marginTop: 0, marginBottom: "18px" }}>
-          Toutes les données proviennent de l&apos;historique (confirmations et annulations salon), filtrées par{" "}
-          <strong>date du créneau</strong> (ou date d&apos;enregistrement si le créneau n&apos;est pas stocké). Période :{" "}
-          {rangeDays} jours à partir du 1 mai 2026. Comparaison vs {rangeDays} jours précédents.
+          La carte <strong>Clients du salon</strong> compte tous les comptes clients en base. Le reste provient de l&apos;historique
+          (confirmations et annulations salon), filtré par <strong>date du créneau</strong> (ou date d&apos;enregistrement si le créneau
+          n&apos;est pas stocké). Période affichée : {rangeDays} jours à partir du 1 mai 2026 ; comparaison vs {rangeDays} jours précédents
+          pour les indicateurs basés sur l&apos;historique.
         </p>
         {error && <p style={{ fontSize: "13px", color: "#dc2626", marginBottom: "14px" }}>{error}</p>}
 
@@ -488,7 +509,11 @@ export default function BarberStatsPage() {
               <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "6px" }}>{kpi.label}</div>
               <div style={{ fontSize: "26px", fontWeight: 700, color: kpi.accent }}>{kpi.value}</div>
               <div style={{ marginTop: "4px", fontSize: "12px", color: "#6b7280" }}>
-                {kpi.delta == null ? "Pas assez d'historique" : `${kpi.delta >= 0 ? "+" : ""}${kpi.delta.toFixed(1)}%`}
+                {kpi.footnote != null && kpi.footnote !== ""
+                  ? kpi.footnote
+                  : kpi.delta == null
+                    ? "Pas assez d'historique"
+                    : `${kpi.delta >= 0 ? "+" : ""}${kpi.delta.toFixed(1)}%`}
               </div>
             </div>
           ))}
