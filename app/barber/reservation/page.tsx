@@ -430,11 +430,25 @@ export default function BarberReservationPage() {
     if (!authData.user) return;
     setCancelling(true);
     setError(null);
+
+    const slotRow = slots.find((s) => s.id === cancelModalSlotId);
+    const { data: bookingRow } = await supabase.from("bookings").select("prestation_id").eq("slot_id", cancelModalSlotId).maybeSingle();
+    let prestationTitle: string | null = null;
+    const prestId = (bookingRow as { prestation_id: number | null } | null)?.prestation_id;
+    if (prestId) {
+      const { data: prest } = await supabase.from("prestations").select("title").eq("id", prestId).maybeSingle();
+      prestationTitle = (prest as { title: string } | null)?.title ?? null;
+    }
+
     const { error: insertErr } = await supabase.from("booking_cancellations").insert({
       slot_id: cancelModalSlotId,
       customer_id: customerId,
       cancel_reason: cancelReason.trim() || null,
       cancelled_by: authData.user.id,
+      slot_date: slotRow?.slot_date ?? null,
+      start_time: slotRow?.start_time ?? null,
+      end_time: slotRow?.end_time ?? null,
+      prestation_title: prestationTitle,
     });
     if (insertErr) {
       setError(insertErr.message);

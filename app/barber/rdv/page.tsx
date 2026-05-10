@@ -197,6 +197,10 @@ export default function BarberRdvPage() {
       customer_id: cancelModalRdv.customer_id,
       cancel_reason: cancelReason.trim() || null,
       cancelled_by: authData.user.id,
+      slot_date: cancelModalRdv.slot_date,
+      start_time: cancelModalRdv.start_time,
+      end_time: cancelModalRdv.end_time,
+      prestation_title: cancelModalRdv.prestationTitle?.trim() || null,
     });
     if (insertErr) {
       setError(insertErr.message);
@@ -265,6 +269,10 @@ export default function BarberRdvPage() {
       customer_id: rdv.customer_id,
       barber_user_id: user.id,
       prestation_points: points,
+      prestation_title: rdv.prestationTitle?.trim() || null,
+      slot_date: rdv.slot_date,
+      start_time: rdv.start_time,
+      end_time: rdv.end_time,
       status,
     });
     if (outcomeErr) {
