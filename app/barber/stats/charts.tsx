@@ -96,7 +96,7 @@ export function DailyFlowChart({ data }: { data: DailyChartRow[] }) {
   return (
     <ChartCard
       title="Flux quotidien"
-      subtitle="RDV pris, annulations et passages (venu / absent)"
+      subtitle="Données issues uniquement de l’historique (date du créneau) : événements du jour, annulations salon, passages."
       minHeight={320}
     >
       <ResponsiveContainer width="100%" height="100%">
@@ -116,7 +116,7 @@ export function DailyFlowChart({ data }: { data: DailyChartRow[] }) {
           <YAxis tick={{ fontSize: 11, fill: C.muted }} width={32} tickLine={false} axisLine={false} allowDecimals={false} />
           <Tooltip contentStyle={tooltipStyle} labelStyle={{ fontWeight: 600, color: "#111" }} />
           <Legend wrapperStyle={{ fontSize: "12px", paddingTop: 8 }} />
-          <Area type="monotone" dataKey="booked" name="RDV pris" stroke={C.booked} strokeWidth={2} fill={`url(#gBooked-${gid})`} />
+          <Area type="monotone" dataKey="booked" name="RDV (historique)" stroke={C.booked} strokeWidth={2} fill={`url(#gBooked-${gid})`} />
           <Line type="monotone" dataKey="cancelled" name="Annulés" stroke={C.cancelled} strokeWidth={2} dot={false} />
           <Area type="monotone" dataKey="arrived" name="Venus" stroke={C.arrived} strokeWidth={2} fill={`url(#gArrived-${gid})`} />
           <Line type="monotone" dataKey="noShow" name="Absents" stroke={C.noShow} strokeWidth={2} dot={false} />
@@ -129,7 +129,7 @@ export function DailyFlowChart({ data }: { data: DailyChartRow[] }) {
 export function PointsFlowChart({ data }: { data: DailyChartRow[] }) {
   if (data.length === 0) return null;
   return (
-    <ChartCard title="Points fidélité" subtitle="Volume ajouté vs retiré par jour (transactions coiffeur)" minHeight={280}>
+    <ChartCard title="Points fidélité" subtitle="Points selon les confirmations (historique), par date du créneau" minHeight={280}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }} barGap={2}>
           <CartesianGrid strokeDasharray="3 6" stroke="#ece8df" vertical={false} />
@@ -148,7 +148,7 @@ export function PointsFlowChart({ data }: { data: DailyChartRow[] }) {
 export function WeekdayBookingsChart({ data }: { data: NamedCount[] }) {
   const max = Math.max(1, ...data.map((d) => d.value));
   return (
-    <ChartCard title="RDV par jour de la semaine" subtitle="Répartition des réservations sur la période" minHeight={260}>
+    <ChartCard title="RDV par jour de la semaine" subtitle="Historique : date du créneau (confirmations + annulations salon)" minHeight={260}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 4 }} barSize={14}>
           <CartesianGrid strokeDasharray="3 6" stroke="#ece8df" horizontal={false} />
@@ -164,7 +164,7 @@ export function WeekdayBookingsChart({ data }: { data: NamedCount[] }) {
 
 export function HourlyPeakChart({ data }: { data: NamedCount[] }) {
   return (
-    <ChartCard title="Heures de créneau réservées" subtitle="Basé sur l’heure de début du créneau" minHeight={260}>
+    <ChartCard title="Heures des créneaux (historique)" subtitle="Heure de début enregistrée dans l’historique" minHeight={260}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: data.length > 10 ? 52 : 8 }}>
           <CartesianGrid strokeDasharray="3 6" stroke="#ece8df" vertical={false} />

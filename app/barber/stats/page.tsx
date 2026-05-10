@@ -16,10 +16,27 @@ import type { DailyChartRow, NamedCount, PointBucket } from "./charts";
 type RangeOption = 7 | 30 | 90;
 type Kpi = { label: string; value: number; accent: string; delta?: number };
 
+type OutcomeRowDb = {
+  id: number;
+  customer_id: string;
+  status: "arrived" | "no_show";
+  prestation_points: number;
+  slot_date: string | null;
+  start_time: string | null;
+  created_at: string;
+};
+
+type CancelRowDb = {
+  id: number;
+  customer_id: string;
+  slot_date: string | null;
+  start_time: string | null;
+  cancelled_at: string;
+};
+
 type StatsState = {
-  totalCustomers: number;
-  totalSlots: number;
-  bookedInRange: number;
+  distinctClients: number;
+  totalHistorique: number;
   cancelledInRange: number;
   arrivedInRange: number;
   noShowInRange: number;
@@ -97,6 +114,29 @@ function csvEscape(value: string | number): string {
   return s;
 }
 
+function effOutcomeDate(o: OutcomeRowDb): string {
+  return (o.slot_date && String(o.slot_date).trim()) || String(o.created_at ?? "").slice(0, 10);
+}
+
+function effCancelDate(c: CancelRowDb): string {
+  return (c.slot_date && String(c.slot_date).trim()) || String(c.cancelled_at ?? "").slice(0, 10);
+}
+
+function inYmdRange(isoYmd: string, startYmd: string, endYmd: string): boolean {
+  return isoYmd >= startYmd && isoYmd <= endYmd;
+}
+
+function weekdayFromIso(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  if (!y || !m || !d) return "";
+  return WEEKDAY_FR[new Date(y, m - 1, d).getDay()];
+}
+
+function hourBucket(startTime: string | null): string | null {
+  if (!startTime) return null;
+  return `${String(startTime).slice(0, 2)}h`;
+}
+
 export default function BarberStatsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -104,9 +144,8 @@ export default function BarberStatsPage() {
   const [rangeDays, setRangeDays] = useState<RangeOption>(30);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<StatsState>({
-    totalCustomers: 0,
-    totalSlots: 0,
-    bookedInRange: 0,
+    distinctClients: 0,
+    totalHistorique: 0,
     cancelledInRange: 0,
     arrivedInRange: 0,
     noShowInRange: 0,
@@ -126,9 +165,9 @@ export default function BarberStatsPage() {
 
   const kpiCards = useMemo<Kpi[]>(
     () => [
-      { label: "Clients enregistrés", value: stats.totalCustomers, accent: "#111827" },
-      { label: "RDV pris", value: stats.bookedInRange, accent: "#0f766e", delta: kpiDeltas.booked },
-      { label: "RDV annulés", value: stats.cancelledInRange, accent: "#b91c1c", delta: kpiDeltas.cancelled },
+      { label: "Clients distincts (historique)", value: stats.distinctClients, accent: "#111827", delta: kpiDeltas.distinct },
+      { label: "RDV (historique)", value: stats.totalHistorique, accent: "#0f766e", delta: kpiDeltas.historique },
+      { label: "Annulations salon", value: stats.cancelledInRange, accent: "#b91c1c", delta: kpiDeltas.cancelled },
       { label: "Clients venus", value: stats.arrivedInRange, accent: "#166534", delta: kpiDeltas.arrived },
       { label: "Clients absents", value: stats.noShowInRange, accent: "#92400e", delta: kpiDeltas.noShow },
       { label: "Points ajoutés", value: stats.pointsAdded, accent: "#1d4ed8", delta: kpiDeltas.pointsAdded },
@@ -153,180 +192,128 @@ export default function BarberStatsPage() {
 
     setError(null);
     const bounds = periodBounds(days);
-    const startIso = clampFromStart(bounds.startIso);
-    const prevStartIso = clampFromStart(bounds.prevStartIso);
-    const prevEndIso = clampFromStart(bounds.prevEndIso);
+    const windowStartYmd = clampFromStart(bounds.startIso).slice(0, 10);
+    const windowEndYmd = toDateKey(new Date());
+    const prevStartYmd = clampFromStart(bounds.prevStartIso).slice(0, 10);
+    const prevEndYmd = clampFromStart(bounds.prevEndIso).slice(0, 10);
+
     const keys = buildWindowKeys(days);
+    const keySet = new Set(keys);
     const dayAgg: Record<string, DailyChartRow> = {};
     keys.forEach((k) => {
       dayAgg[k] = { label: k.slice(5), booked: 0, cancelled: 0, arrived: 0, noShow: 0, pointsAdded: 0, pointsRemoved: 0 };
     });
 
-    // Charger les créneaux du coiffeur (id + horaire + date), pagination par sécurité.
-    const slotMap: Record<number, { slot_date: string; start_time: string }> = {};
-    const slotIds: number[] = [];
-    let offset = 0;
-    const pageSize = 1000;
-    while (true) {
-      const { data, error: slotErr } = await supabase
-        .from("availability_slots")
-        .select("id, slot_date, start_time")
-        .eq("created_by", user.id)
-        .range(offset, offset + pageSize - 1);
-      if (slotErr) {
-        setError(slotErr.message);
+    const allOutcomes: OutcomeRowDb[] = [];
+    let off = 0;
+    const pageSize = 500;
+    for (;;) {
+      const { data, error: oErr } = await supabase
+        .from("booking_outcomes")
+        .select("id, customer_id, status, prestation_points, slot_date, start_time, created_at")
+        .eq("barber_user_id", user.id)
+        .order("id", { ascending: true })
+        .range(off, off + pageSize - 1);
+      if (oErr) {
+        setError(oErr.message);
         return;
       }
-      const chunk = (data ?? []) as { id: number; slot_date: string; start_time: string }[];
-      chunk.forEach((s) => {
-        slotIds.push(s.id);
-        slotMap[s.id] = { slot_date: s.slot_date, start_time: s.start_time };
-      });
+      const chunk = (data ?? []) as OutcomeRowDb[];
+      allOutcomes.push(...chunk);
       if (chunk.length < pageSize) break;
-      offset += pageSize;
+      off += pageSize;
     }
 
-    const { count: totalCustomers, error: customersErr } = await supabase.from("customers").select("*", { head: true, count: "exact" });
-    if (customersErr) return void setError(customersErr.message);
+    const allCancels: CancelRowDb[] = [];
+    off = 0;
+    for (;;) {
+      const { data, error: cErr } = await supabase
+        .from("booking_cancellations")
+        .select("id, customer_id, slot_date, start_time, cancelled_at")
+        .eq("cancelled_by", user.id)
+        .order("id", { ascending: true })
+        .range(off, off + pageSize - 1);
+      if (cErr) {
+        setError(cErr.message);
+        return;
+      }
+      const chunk = (data ?? []) as CancelRowDb[];
+      allCancels.push(...chunk);
+      if (chunk.length < pageSize) break;
+      off += pageSize;
+    }
 
-    const { count: totalSlots, error: slotsCountErr } = await supabase
-      .from("availability_slots")
-      .select("*", { head: true, count: "exact" })
-      .eq("created_by", user.id);
-    if (slotsCountErr) return void setError(slotsCountErr.message);
+    const inCurrent = (ymd: string) => inYmdRange(ymd, windowStartYmd, windowEndYmd);
+    const inPrev = (ymd: string) => inYmdRange(ymd, prevStartYmd, prevEndYmd);
 
-    let bookedInRange = 0;
-    let bookedPrev = 0;
+    const outCurr = allOutcomes.filter((o) => inCurrent(effOutcomeDate(o)));
+    const cancelCurr = allCancels.filter((c) => inCurrent(effCancelDate(c)));
+    const outPrev = allOutcomes.filter((o) => inPrev(effOutcomeDate(o)));
+    const cancelPrev = allCancels.filter((c) => inPrev(effCancelDate(c)));
+
+    const distinctClients = new Set([...outCurr.map((o) => o.customer_id), ...cancelCurr.map((c) => c.customer_id)]).size;
+    const distinctPrevCount = new Set([...outPrev.map((o) => o.customer_id), ...cancelPrev.map((c) => c.customer_id)]).size;
+
+    const totalHistorique = outCurr.length + cancelCurr.length;
+    const totalHistoriquePrev = outPrev.length + cancelPrev.length;
+
+    const cancelledInRange = cancelCurr.length;
+    const cancelledPrevCount = cancelPrev.length;
+
+    let arrivedInRange = 0;
+    let noShowInRange = 0;
+    let arrivedPrevCount = 0;
+    let noShowPrevCount = 0;
+    let pointsAdded = 0;
+    let pointsRemoved = 0;
+    let pointsAddedPrev = 0;
+    let pointsRemovedPrev = 0;
+    const pointBuckets: Record<number, number> = {};
     const weekdayCounts: Record<string, number> = {};
     const hourCounts: Record<string, number> = {};
 
-    if (slotIds.length > 0) {
-      const { data: bookingRows, error: bookingErr } = await supabase
-        .from("bookings")
-        .select("slot_id, created_at")
-        .in("slot_id", slotIds)
-        .gte("created_at", startIso)
-        .lte("created_at", bounds.endIso);
-      if (bookingErr) return void setError(bookingErr.message);
-      bookedInRange = (bookingRows ?? []).length;
-      (bookingRows ?? []).forEach((row) => {
-        const r = row as { slot_id: number; created_at: string };
-        const key = String(r.created_at ?? "").slice(0, 10);
-        if (dayAgg[key]) dayAgg[key].booked += 1;
+    const bumpWeekdayHour = (effYmd: string, startTime: string | null) => {
+      const wd = weekdayFromIso(effYmd);
+      if (wd) weekdayCounts[wd] = (weekdayCounts[wd] ?? 0) + 1;
+      const hb = hourBucket(startTime);
+      if (hb) hourCounts[hb] = (hourCounts[hb] ?? 0) + 1;
+    };
 
-        const slot = slotMap[r.slot_id];
-        if (slot) {
-          const [y, m, d] = slot.slot_date.split("-").map(Number);
-          const weekday = WEEKDAY_FR[new Date(y, m - 1, d).getDay()];
-          const hour = String(slot.start_time).slice(0, 2) + "h";
-          weekdayCounts[weekday] = (weekdayCounts[weekday] ?? 0) + 1;
-          hourCounts[hour] = (hourCounts[hour] ?? 0) + 1;
-        }
-      });
+    outCurr.forEach((o) => {
+      const eff = effOutcomeDate(o);
+      if (o.status === "arrived") arrivedInRange += 1;
+      else noShowInRange += 1;
 
-      const { count: bookedPrevCount, error: bookedPrevErr } = await supabase
-        .from("bookings")
-        .select("*", { head: true, count: "exact" })
-        .in("slot_id", slotIds)
-        .gte("created_at", prevStartIso)
-        .lte("created_at", prevEndIso);
-      if (bookedPrevErr) return void setError(bookedPrevErr.message);
-      bookedPrev = Number(bookedPrevCount ?? 0);
-    }
-
-    const { data: cancelRows, error: cancelErr } = await supabase
-      .from("booking_cancellations")
-      .select("slot_id, cancelled_at")
-      .eq("cancelled_by", user.id)
-      .gte("cancelled_at", startIso)
-      .lte("cancelled_at", bounds.endIso);
-    if (cancelErr) return void setError(cancelErr.message);
-    const cancelledInRange = (cancelRows ?? []).length;
-    (cancelRows ?? []).forEach((row) => {
-      const key = String((row as { cancelled_at: string }).cancelled_at ?? "").slice(0, 10);
-      if (dayAgg[key]) dayAgg[key].cancelled += 1;
-    });
-    const { count: cancelledPrev, error: cancelledPrevErr } = await supabase
-      .from("booking_cancellations")
-      .select("*", { head: true, count: "exact" })
-      .eq("cancelled_by", user.id)
-      .gte("cancelled_at", prevStartIso)
-      .lte("cancelled_at", prevEndIso);
-    if (cancelledPrevErr) return void setError(cancelledPrevErr.message);
-
-    const { data: outcomeRows, error: outcomeErr } = await supabase
-      .from("booking_outcomes")
-      .select("slot_id, status, prestation_points, created_at")
-      .eq("barber_user_id", user.id)
-      .gte("created_at", startIso)
-      .lte("created_at", bounds.endIso);
-    if (outcomeErr) return void setError(outcomeErr.message);
-    let arrivedInRange = 0;
-    let noShowInRange = 0;
-    const pointBuckets: Record<number, number> = {};
-    (outcomeRows ?? []).forEach((row) => {
-      const r = row as { slot_id: number; status: "arrived" | "no_show"; prestation_points: number; created_at: string };
-      const key = String(r.created_at ?? "").slice(0, 10);
-      if (r.status === "arrived") {
-        arrivedInRange += 1;
-        if (dayAgg[key]) dayAgg[key].arrived += 1;
-      } else {
-        noShowInRange += 1;
-        if (dayAgg[key]) dayAgg[key].noShow += 1;
+      const p = Number(o.prestation_points ?? 0);
+      if (p > 0) {
+        pointsAdded += p;
+        pointBuckets[p] = (pointBuckets[p] ?? 0) + 1;
       }
-      const pts = Math.max(0, Number(r.prestation_points || 0));
-      if (pts > 0) pointBuckets[pts] = (pointBuckets[pts] ?? 0) + 1;
-    });
-
-    const { count: arrivedPrev, error: arrivedPrevErr } = await supabase
-      .from("booking_outcomes")
-      .select("*", { head: true, count: "exact" })
-      .eq("barber_user_id", user.id)
-      .eq("status", "arrived")
-      .gte("created_at", prevStartIso)
-      .lte("created_at", prevEndIso);
-    if (arrivedPrevErr) return void setError(arrivedPrevErr.message);
-    const { count: noShowPrev, error: noShowPrevErr } = await supabase
-      .from("booking_outcomes")
-      .select("*", { head: true, count: "exact" })
-      .eq("barber_user_id", user.id)
-      .eq("status", "no_show")
-      .gte("created_at", prevStartIso)
-      .lte("created_at", prevEndIso);
-    if (noShowPrevErr) return void setError(noShowPrevErr.message);
-
-    const { data: txRows, error: txErr } = await supabase
-      .from("transactions")
-      .select("points, created_at")
-      .eq("barber_user_id", user.id)
-      .gte("created_at", startIso)
-      .lte("created_at", bounds.endIso);
-    if (txErr) return void setError(txErr.message);
-    let pointsAdded = 0;
-    let pointsRemoved = 0;
-    (txRows ?? []).forEach((row) => {
-      const r = row as { points: number; created_at: string };
-      const p = Number(r.points ?? 0);
-      if (p > 0) pointsAdded += p;
       if (p < 0) pointsRemoved += Math.abs(p);
-      const dayKey = String(r.created_at ?? "").slice(0, 10);
-      if (dayAgg[dayKey]) {
-        if (p > 0) dayAgg[dayKey].pointsAdded += p;
-        if (p < 0) dayAgg[dayKey].pointsRemoved += Math.abs(p);
+
+      if (keySet.has(eff)) {
+        dayAgg[eff].booked += 1;
+        if (o.status === "arrived") dayAgg[eff].arrived += 1;
+        else dayAgg[eff].noShow += 1;
+        if (p > 0) dayAgg[eff].pointsAdded += p;
+        if (p < 0) dayAgg[eff].pointsRemoved += Math.abs(p);
       }
+      bumpWeekdayHour(eff, o.start_time);
     });
 
-    const { data: txPrevRows, error: txPrevErr } = await supabase
-      .from("transactions")
-      .select("points, created_at")
-      .eq("barber_user_id", user.id)
-      .gte("created_at", prevStartIso)
-      .lte("created_at", prevEndIso);
-    if (txPrevErr) return void setError(txPrevErr.message);
-    let pointsAddedPrev = 0;
-    let pointsRemovedPrev = 0;
-    (txPrevRows ?? []).forEach((row) => {
-      const p = Number((row as { points: number }).points ?? 0);
+    cancelCurr.forEach((c) => {
+      const eff = effCancelDate(c);
+      if (keySet.has(eff)) {
+        dayAgg[eff].booked += 1;
+        dayAgg[eff].cancelled += 1;
+      }
+      bumpWeekdayHour(eff, c.start_time);
+    });
+
+    outPrev.forEach((o) => {
+      if (o.status === "arrived") arrivedPrevCount += 1;
+      else noShowPrevCount += 1;
+      const p = Number(o.prestation_points ?? 0);
       if (p > 0) pointsAddedPrev += p;
       if (p < 0) pointsRemovedPrev += Math.abs(p);
     });
@@ -350,30 +337,30 @@ export default function BarberStatsPage() {
       .map(({ name, value }) => ({ name, value }));
 
     setKpiDeltas({
-      booked: percentDelta(bookedInRange, bookedPrev),
-      cancelled: percentDelta(cancelledInRange, Number(cancelledPrev ?? 0)),
-      arrived: percentDelta(arrivedInRange, Number(arrivedPrev ?? 0)),
-      noShow: percentDelta(noShowInRange, Number(noShowPrev ?? 0)),
+      distinct: percentDelta(distinctClients, distinctPrevCount),
+      historique: percentDelta(totalHistorique, totalHistoriquePrev),
+      cancelled: percentDelta(cancelledInRange, cancelledPrevCount),
+      arrived: percentDelta(arrivedInRange, arrivedPrevCount),
+      noShow: percentDelta(noShowInRange, noShowPrevCount),
       pointsAdded: percentDelta(pointsAdded, pointsAddedPrev),
       pointsRemoved: percentDelta(pointsRemoved, pointsRemovedPrev),
     });
 
     setStats({
-      totalCustomers: Number(totalCustomers ?? 0),
-      totalSlots: Number(totalSlots ?? 0),
-      bookedInRange,
+      distinctClients,
+      totalHistorique,
       cancelledInRange,
       arrivedInRange,
       noShowInRange,
       pointsAdded,
       pointsRemoved,
       showRate: safeRate(arrivedInRange, totalClosed),
-      cancelRate: safeRate(cancelledInRange, bookedInRange),
+      cancelRate: safeRate(cancelledInRange, totalHistorique > 0 ? totalHistorique : 0),
       noShowRate: safeRate(noShowInRange, totalClosed),
       busiestWeekday,
       busiestHour,
       prestationPointBuckets: Object.entries(pointBuckets)
-        .map(([points, count]) => ({ points: Number(points), count }))
+        .map(([pts, count]) => ({ points: Number(pts), count }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 5),
     });
@@ -395,9 +382,9 @@ export default function BarberStatsPage() {
     const lines: string[] = [];
     lines.push("Periode (jours),Valeur");
     lines.push(`${rangeDays},${rangeDays}`);
-    lines.push(`Clients enregistres,${stats.totalCustomers}`);
-    lines.push(`RDV pris (${rangeDays}j),${stats.bookedInRange}`);
-    lines.push(`RDV annules (${rangeDays}j),${stats.cancelledInRange}`);
+    lines.push(`Clients distincts historique,${stats.distinctClients}`);
+    lines.push(`RDV historique (${rangeDays}j),${stats.totalHistorique}`);
+    lines.push(`Annulations salon (${rangeDays}j),${stats.cancelledInRange}`);
     lines.push(`Clients venus (${rangeDays}j),${stats.arrivedInRange}`);
     lines.push(`Clients absents (${rangeDays}j),${stats.noShowInRange}`);
     lines.push(`Points ajoutes (${rangeDays}j),${stats.pointsAdded}`);
@@ -406,7 +393,7 @@ export default function BarberStatsPage() {
     lines.push(`Cancel rate (%),${stats.cancelRate.toFixed(1)}`);
     lines.push(`No-show rate (%),${stats.noShowRate.toFixed(1)}`);
     lines.push("");
-    lines.push("Jour,RDV pris,RDV annules,Clients venus,Clients absents,Points ajoutes,Points retires");
+    lines.push("Jour,Volume historique,Annulations salon,Clients venus,Clients absents,Points ajoutes,Points retires");
     daily.forEach((d) => {
       lines.push([csvEscape(d.label), d.booked, d.cancelled, d.arrived, d.noShow, d.pointsAdded, d.pointsRemoved].join(","));
     });
@@ -489,8 +476,9 @@ export default function BarberStatsPage() {
         </div>
 
         <p style={{ fontSize: "13px", color: "#6b7280", marginTop: 0, marginBottom: "18px" }}>
-          Vue business sur {rangeDays} jours, avec statistiques RDV prises en compte a partir du 1 mai 2026.
-          Comparaison vs {rangeDays} jours précédents quand disponible.
+          Toutes les données proviennent de l&apos;historique (confirmations et annulations salon), filtrées par{" "}
+          <strong>date du créneau</strong> (ou date d&apos;enregistrement si le créneau n&apos;est pas stocké). Période :{" "}
+          {rangeDays} jours à partir du 1 mai 2026. Comparaison vs {rangeDays} jours précédents.
         </p>
         {error && <p style={{ fontSize: "13px", color: "#dc2626", marginBottom: "14px" }}>{error}</p>}
 
@@ -526,10 +514,6 @@ export default function BarberStatsPage() {
           <div style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "12px" }}>
             <div style={{ fontSize: "12px", color: "#6b7280" }}>Heure la plus demandée</div>
             <div style={{ fontSize: "22px", fontWeight: 700, color: "#111" }}>{stats.busiestHour}</div>
-          </div>
-          <div style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "12px" }}>
-            <div style={{ fontSize: "12px", color: "#6b7280" }}>Créneaux totaux créés</div>
-            <div style={{ fontSize: "22px", fontWeight: 700, color: "#111" }}>{stats.totalSlots}</div>
           </div>
         </div>
 

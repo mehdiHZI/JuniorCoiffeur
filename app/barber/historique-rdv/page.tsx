@@ -66,6 +66,14 @@ function formatTimeRange(start: string | null, end: string | null): string {
   return `${s} – ${e}`;
 }
 
+/** Date du créneau (jour + date) + plage horaire, comme demandé pour la colonne Créneau. */
+function formatCreneauCell(isoYmd: string, start: string | null, end: string | null): string {
+  const datePart = formatDateHeading(isoYmd);
+  const timePart = formatTimeRange(start, end);
+  if (!timePart) return datePart;
+  return `${datePart} · ${timePart}`;
+}
+
 async function mapCustomersToNames(customerIds: string[]) {
   const firstMap: Record<string, string> = {};
   const lastMap: Record<string, string> = {};
@@ -301,14 +309,14 @@ export default function BarberHistoriqueRdvPage() {
                             r.status === "arrived"
                               ? { bg: "#dcfce7", color: "#166534", border: "#bbf7d0" }
                               : { bg: "#fee2e2", color: "#b91c1c", border: "#fecaca" };
-                          const timeLabel = formatTimeRange(r.start_time, r.end_time);
+                          const creneauLabel = formatCreneauCell(displayIsoDateRow(r), r.start_time, r.end_time);
                           return (
                             <tr key={`outcome-${r.id}`} style={{ borderTop: "1px solid #f3f4f6" }}>
                               <td style={{ padding: "10px 10px 10px 0", color: "#111" }}>{r.firstName || "—"}</td>
                               <td style={{ padding: "10px", color: "#111" }}>{r.lastName || "—"}</td>
                               <td style={{ padding: "10px", color: "#374151" }}>{prest}</td>
-                              <td style={{ padding: "10px", color: "#6b7280", fontSize: "13px", whiteSpace: "nowrap" }}>
-                                {timeLabel || "—"}
+                              <td style={{ padding: "10px", color: "#6b7280", fontSize: "13px", maxWidth: "280px", lineHeight: 1.35 }}>
+                                {creneauLabel}
                               </td>
                               <td style={{ padding: "10px 0 10px 10px" }}>
                                 <span
@@ -331,7 +339,7 @@ export default function BarberHistoriqueRdvPage() {
                         }
 
                         const prest = r.prestation_title?.trim() || "—";
-                        const timeLabel = formatTimeRange(r.start_time, r.end_time);
+                        const creneauLabel = formatCreneauCell(displayIsoDateRow(r), r.start_time, r.end_time);
                         return (
                           <tr key={`cancel-${r.id}`} style={{ borderTop: "1px solid #f3f4f6" }}>
                             <td style={{ padding: "10px 10px 10px 0", color: "#111" }}>{r.firstName || "—"}</td>
@@ -344,8 +352,8 @@ export default function BarberHistoriqueRdvPage() {
                                 </div>
                               ) : null}
                             </td>
-                            <td style={{ padding: "10px", color: "#6b7280", fontSize: "13px", whiteSpace: "nowrap" }}>
-                              {timeLabel || "—"}
+                            <td style={{ padding: "10px", color: "#6b7280", fontSize: "13px", maxWidth: "280px", lineHeight: 1.35 }}>
+                              {creneauLabel}
                             </td>
                             <td style={{ padding: "10px 0 10px 10px" }}>
                               <span
