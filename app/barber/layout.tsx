@@ -184,16 +184,6 @@ export default function BarberLayout({
             type="button"
             style={{
               ...menuItemBase,
-              ...(pathname.startsWith("/barber/statisque2") ? activeItemExtra : {}),
-            }}
-            onClick={() => nav("/barber/statisque2")}
-          >
-            Statistique 2
-          </button>
-          <button
-            type="button"
-            style={{
-              ...menuItemBase,
               ...(pathname.startsWith("/barber/historique-rdv") ? activeItemExtra : {}),
             }}
             onClick={() => nav("/barber/historique-rdv")}
