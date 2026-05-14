@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { PWARegister } from "./components/PWARegister";
-import { InstallPWAButton } from "./components/InstallPWAButton";
 import { FloatingLogo } from "./components/FloatingLogo";
 
 const geistSans = Geist({
@@ -47,7 +46,6 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <PWARegister />
-        <InstallPWAButton />
         <FloatingLogo />
         {children}
       </body>
